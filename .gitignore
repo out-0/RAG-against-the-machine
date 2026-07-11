@@ -1,0 +1,4 @@
+.python-version
+.nvim/
+__pycache__/*
+
