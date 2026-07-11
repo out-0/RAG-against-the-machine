@@ -1,4 +1,6 @@
 .python-version
 .nvim/
 __pycache__/*
-
+__pycache__
+.mypy_cache
+.mypy_cache/*

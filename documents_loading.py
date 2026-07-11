@@ -1,6 +1,4 @@
 from pathlib import Path
-from typing import List
-
 
 class Document:
     """"""
@@ -13,35 +11,32 @@ class Document:
     def __repr__(self) -> str:
         """"""
         return (
-            f"Document:\n"
+            f"\nDocument:\n"
             f"        path={self.path}\n"
             f"        content_length={len(self.content)}\n"
-            f"        extension={self.extension}"
+            f"        extension={self.extension}\n"
         )
 
-
-def load_files() -> List[Document]:
+def load_files(input_path:str) -> list[Document]:
     """"""
 
-    # Knowledge base path
-    vllm_repo_path: str = "vllm-0.10.1"
-
+    path = Path(input_path)
     # Targeted files
-    extensions: List[str] = [".py", ".md"]
+    extensions: list[str] = [".py", ".md"]
+    docs_list: list[Document] = [] 
 
-    docs_list: List[Document] = [] 
-
-    for path in Path(vllm_repo_path).rglob("*"):
-        if path.suffix in extensions:
-            file_text: str = path.read_text(encoding="utf-8", errors="ignore")
-            docs_list.append(
-                Document(
-                    # the above 'path' is pathlib.PosixPath so i got it to str
-                    path=str(path),
-                    content=file_text,
-                    extension=path.suffix
+    try:
+        for path in path.rglob("*"):
+            if path.suffix in extensions:
+                file_text: str = path.read_text(encoding="utf-8", errors="ignore")
+                docs_list.append(
+                    Document(
+                        # the above 'path' is pathlib.PosixPath so i got it to str
+                        path=str(path),
+                        content=file_text,
+                        extension=path.suffix
+                    )
                 )
-            )
+    except Exception:
+        raise ValueError("Error: processing input files")
     return docs_list
-
-load_files()
