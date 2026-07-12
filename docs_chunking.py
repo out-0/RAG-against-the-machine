@@ -3,6 +3,8 @@
 import ast
 from dataclasses import dataclass
 import itertools
+from pydoc import Doc, text
+from sys import maxsize
 from documents_loading import Document
 
 
@@ -14,7 +16,8 @@ class Chunk:
     end_index: int
 
 class Chunker:
-    """"""
+    """
+    """
 
     def __init__(self, files: list[Document]) -> None:
         """"""
@@ -37,6 +40,17 @@ class Chunker:
         # This is needed to calculate some metadata of a node
         lines_offsets: list[int] = Chunker.build_lines_count(file)
 
+
+
+        # TODO: PUT IMPORTS WITH WITH EVERY CHUNK FOR MORE CONTEXT,
+        #
+        # edit: Since doing that while handling and respecting the max size
+        # will introduce more complexity and miss, we'll skip it regarding
+        # that the questions is not relay on the dependencis or imports.
+        # 
+        # imports_tmp: list[str] = [ast.unparse(n) for n in tree.body
+        #                      if isinstance(n, (ast.Import, ast.ImportFrom))]
+        # imports: str = "\n".join(imports_tmp)
 
         # Iterate over the nodes from three (AST)
         for node in ast.iter_child_nodes(tree):
@@ -119,19 +133,77 @@ class Chunker:
         splited_chunks = []
         pass
 
-    def _split_class_node(self, node: ast.ClassDef, source_file: str) -> list:
+    def _split_class_node(
+            self,
+            node: ast.ClassDef,
+            source_file: str,
+            max_size: int
+        ) -> list[Chunk]:
         """"""
 
-        all_chunks: list = []
+        all_chunks: list[Chunk] = []
         one_chunk: str = ""
+
+        # Not set yet, its will updated at the first
+        chunk_start_idx: int = -1
 
         for method_node in node.body:
             text_code: str | None = ast.get_source_segment(
-                    source=file_content, node=node
+                    source=source_file, node=node
+            )
+
+            if text_code is None:
+                raise ValueError("Error while extracting source segment")
+
+            node_start_idx: int
+            node_start_idx, _ = Chunker._get_chunk_indexes(
+                    source=source_file,
+                    node=method_node
+            )
+
+            # Check if the chunk not excedding the max size
+            if len(text_code) < max_size:
+                # Check if concatinating them will result to oversized
+                # This case is not reached at the very first iter
+                if len(one_chunk + text_code) > max_size:
+                    all_chunks.append(
+                            Chunk(
+                                id=next(self.id_generator),
+                                content=one_chunk,
+                                start_index=chunk_start_idx,
+                                end_index=chunk_start_idx + len(one_chunk)
+                            )
                     )
-            if len(text_code) > max_size:
-                method_chunks: list[Chunk] = self._split_method_node()
-        pass
+                    one_chunk = text_code
+                    chunk_start_idx = node_start_idx
+
+                else:
+                    if one_chunk == "":
+                        one_chunk = text_code
+                        chunk_start_idx = node_start_idx
+
+                    else:
+                        one_chunk = "\n".join([one_chunk, text_code])
+
+
+            # If method is too long we split it
+            else:
+                method_chunks: list[Chunk] = self._split_method_node(
+                        source=source_file, node=method_node, max_size=max_size)
+                all_chunks.extend(method_chunks)
+
+        if one_chunk:
+            all_chunks.append(
+                    Chunk(
+                        id=next(self.id_generator),
+                        content=one_chunk,
+                        start_index=chunk_start_idx,
+                        end_index=chunk_start_idx + len(one_chunk),
+                        )
+                    )
+
+        return all_chunks
+
 
     @staticmethod
     def _get_chunk_indexes(source: str, node: ast.stmt) -> tuple[int, int]:
