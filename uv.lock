@@ -550,7 +550,7 @@ wheels = [
 ]
 
 [[package]]
-name = "rag-again-me"
+name = "rag-against-the-machine"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
