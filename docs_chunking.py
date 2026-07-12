@@ -133,7 +133,7 @@ class Chunker:
         pass
 
     @staticmethod
-    def _get_chunk_indexes(node: ast.AST,) -> tuple[int, int]:
+    def _get_chunk_indexes(source: str, node: ast.stmt) -> tuple[int, int]:
         """For calculating the start index and end index of a chunk
         withing a file we are using some properties that AST already
         using internally (node.lineno | node.col_offset | node.end_lineno
@@ -159,19 +159,24 @@ class Chunker:
 
         # Each index represent a line and the value is the character
         # count is the character count its start at.
-        lines_offsets: list = [0] # Line 1 start at character 0
+        lines_offsets: list[int] = [0] # Line 1 start at character 0
 
         for line in source.splitlines(keepends=True):
             lines_offsets.append(lines_offsets[-1] + len(line))
 
+        lineno: int | None = node.lineno
+        end_lineno: int | None = node.end_lineno
+        col_offset: int | None = node.col_offset
+        end_col_offset: int | None = node.end_col_offset
 
+        if lineno and end_lineno and col_offset and end_col_offset:
+            start: int = lines_offsets[lineno - 1] + col_offset
+            end: int = lines_offsets[end_lineno - 1] + end_col_offset
 
-        start: int = lines_offsets[node.lineno - 1] + node.col_offset
-        end: int = lines_offsets[node.end_lineno - 1] + node.end_col_offset
-
-        return start, end
-
-
+            return start, end
+        # This is unreachable case
+        else:
+            raise AttributeError("Error will access node attributes")
 
     def _split_method_node(
             self,
@@ -236,7 +241,7 @@ class Chunker:
                             )
                         )
                 # Update the indexes for the next chunks.
-                cursor += len(one_chunk)
+                cursor += len(one_chunk) + 1
                 one_chunk = ""
 
         if one_chunk:
