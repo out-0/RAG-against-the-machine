@@ -1,5 +1,5 @@
 [project]
-name = "RAG against the machine"
+name = "RAG-against-the-machine"
 version = "0.1.0"
 description = "RAG system"  # TODO: Update later.
 readme = "README.md"
