@@ -119,11 +119,12 @@ class Chunker:
         splited_chunks = []
         pass
 
-    def _split_class_node(self, body: ast.AST, source_file: str) -> list:
+    def _split_class_node(self, node: ast.ClassDef, source_file: str) -> list:
         """"""
 
         all_chunks: list = []
         one_chunk: str = ""
+
         for method_node in node.body:
             text_code: str | None = ast.get_source_segment(
                     source=file_content, node=node
@@ -181,7 +182,7 @@ class Chunker:
     def _split_method_node(
             self,
             source: str,
-            node: ast.AST,
+            node: ast.stmt,
             max_size: int
         ) -> list[Chunk]:
         """Split a method into lines and shrunk them after that while
@@ -208,7 +209,7 @@ class Chunker:
         # Since we going to split the string so we track metadata manually
         global_start_idx: int
 
-        global_start_idx, _ = Chunker._get_chunk_indexes(node)
+        global_start_idx, _ = Chunker._get_chunk_indexes(source, node)
 
         text_code: str | None = ast.get_source_segment(
                 source=source, node=node
