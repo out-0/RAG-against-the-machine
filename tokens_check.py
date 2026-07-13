@@ -12,5 +12,3 @@ def tokens_count_from_string(string: str, encoding_name: str) -> int:
     )
     tokens_count: int = len(encoding.encode(string))
     return tokens_count
-
-
