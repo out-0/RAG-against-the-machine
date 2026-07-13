@@ -1,10 +1,9 @@
 # TODO: CREATE ONE SPLITER BY THE PYTHON CODE TEXT SPLITER FROM LANGCHAIN
 # TODO: CREATE ANOTHER ONE USING AST (ABSTRACT SYNTAX TREE)
+# TODO: SET A LIMIT TO SOMETHING LIKE 100 SO IF ITS <= JUST CHUNK 100 DIRECTLY
 import ast
 from dataclasses import dataclass
 import itertools
-from pydoc import Doc, text
-from sys import maxsize
 from documents_loading import Document
 
 
@@ -18,7 +17,6 @@ class Chunk:
 class Chunker:
     """
     """
-
     def __init__(self, files: list[Document], max_size: int) -> None:
         """"""
         self.files: list[Document] = files
@@ -28,20 +26,18 @@ class Chunker:
 
         self.max_size: int = max_size
 
-    def chunk_python_file(self, file: Document) -> None:
+    def chunk_python_file(self, source_file: Document) -> list[Chunk]:
         """"""
-        print(file.content)
-        tree: ast.Module = ast.parse(source=file.content)
+        print(source_file.content)
+        tree: ast.Module = ast.parse(source=source_file.content)
 
         # This for major functionality of python like (class's, functions)
-        chunks: list[Chunk] = []
+        splited_chunks: list[Chunk] = []
 
         # This for the rest of things in a pyhthon code (imports, globals)
-        accumulated: list = []
+        outscoop_code: list[str] = []
 
-        # This is needed to calculate some metadata of a node
-        lines_offsets: list[int] = Chunker.build_lines_count(file)
-
+        one_chunk: str = ""
 
 
         # TODO: PUT IMPORTS WITH WITH EVERY CHUNK FOR MORE CONTEXT,
@@ -56,49 +52,80 @@ class Chunker:
 
         # Iterate over the nodes from three (AST)
         for node in ast.iter_child_nodes(tree):
+            node_start_idx, _ = self._get_chunk_indexes(
+                    source=source_file.content,
+                    node=node,
+                )
+            chunk_start_idx: int = node_start_idx
 
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+
+                # Check if there is already something
+                # accumulated so we append it first
+                if outscoop_code:
+                    temp: str
+                    temp = "\n".join(outscoop_code)
+                    splited_chunks.append(
+                            Chunk(
+                                id=next(self.id_generator),
+                                content=temp,
+                                start_index=chunk_start_idx, # TODO: CHECK LATER IF ITS COORECT
+                                end_index=chunk_start_idx + len(temp),
+                                )
+                            )
+                    outscoop_code = []
+                    chunk_start_idx= len(temp) + 1
+
                 # Extracting the real source code of a node
                 code_text: str | None = ast.get_source_segment(
-                        source=file.content, node=node
+                        source=source_file.content, node=node
                 )
 
                 if code_text and len(code_text) <= self.max_size:
                     # Extracting some metadata
-                    start_idx, end_idx = Chunker._get_chunk_indexes(
-                            source=file.content, node=node
+                    start_idx, end_idx = self._get_chunk_indexes(
+                            source=source_file.content, node=node
                     )
                     chunk: Chunk = Chunk(
                         id=next(self.id_generator),
                         content=code_text,
                         start_index=start_idx,
-                        end_indext=end_idx,
+                        end_index=end_idx,
                     )
-                    chunks.append(chunk)
+                    splited_chunks.append(chunk)
 
                 # Too big, split, handle seperatly
                 else:
-                    chunks.extend(
+                    splited_chunks.extend(
                         self.split_oversized_node(
-                            node, file.content, args.max_chunk_size
+                            node=node,
+                            source_file=source_file.content,
+                            max_size=self.max_size,
                         )
                     )
-
+            # Collect other compenents
+            # TODO: Set a minimum limit for chunk size
             else:
                 code_text: str | None = ast.get_source_segment(
-                    source=file.content, node=node
+                    source=source_file.content, node=node
                 )
-                # Just a defensive since logically we wont hit that case
-                # since the files parsed is coming as external so info
-                # is already set.
+                # Just a defensive.
                 if not code_text:
                     continue
-                if len(code_text) + len(accumulated) >= args.max_chunk_size:
-                    chunks.append({
-                        
-                    })
+                if len(code_text) + len(outscoop_code) >= self.max_size:
+                    splited_chunks.append(
+                        Chunk(
+                            id=next(self.id_generator),
+                            content=code_text,
+                            start_index=-1, # TODO: 
+                            end_index=-1,
+                            )
+                        )
+                    one_chunk = code_text
+                    #TODO: UPDATE START IDX SICNE WE DONT WITH THE OLD CHUNK
+                else:
+                    one_chunk = "\n".join([one_chunk, code_text])
 
-                print(code)
         exit()
 
     def chunk_markdown_file(self, file: Document) -> None:
@@ -111,24 +138,20 @@ class Chunker:
         for file in self.files:
             match file.extension:
                 case ".py":
-                    self.chunk_python_file(file)
+                    chunks: list[Chunk] = self.chunk_python_file(file)
                 case ".md":
                     pass
-                    self.chunk_markdown_file(file)
+                # chunks: list[Chunk] = self.chunk_markdown_file(file)
                 case _:
                     # This default should not reached for the current situation
                     pass
-
-    def set_metadata(self) -> None:
-        """"""
-        pass
 
     def split_oversized_node(
         self, 
         node: ast.AST,
         source_file: str,
         max_size:int,
-    ) -> None:
+    ) -> list[Chunk]:
         """"""
         # If node is A class, we spit its methods and shrink some of them later
         # for optimization
@@ -145,6 +168,16 @@ class Chunker:
                         max_size=max_size,
                     )
             )
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            splited_chunks.extend(
+                    self._split_method_node(
+                        source=source_file,
+                        node=node,
+                        max_size=max_size
+                        )
+                    )
+
+        return splited_chunks
 
     def _split_class_node(
             self,
@@ -169,7 +202,7 @@ class Chunker:
                 raise ValueError("Error while extracting source segment")
 
             node_start_idx: int
-            node_start_idx, _ = Chunker._get_chunk_indexes(
+            node_start_idx, _ = self._get_chunk_indexes(
                     source=source_file,
                     node=method_node
             )
@@ -218,8 +251,8 @@ class Chunker:
         return all_chunks
 
 
-    @staticmethod
-    def _get_chunk_indexes(source: str, node: ast.stmt) -> tuple[int, int]:
+    # @staticmethod
+    def _get_chunk_indexes(self, source: str, node: ast.stmt | ast.AST) -> tuple[int, int]:
         """For calculating the start index and end index of a chunk
         withing a file we are using some properties that AST already
         using internally (node.lineno | node.col_offset | node.end_lineno
@@ -250,19 +283,14 @@ class Chunker:
         for line in source.splitlines(keepends=True):
             lines_offsets.append(lines_offsets[-1] + len(line))
 
-        lineno: int | None = node.lineno
-        end_lineno: int | None = node.end_lineno
-        col_offset: int | None = node.col_offset
-        end_col_offset: int | None = node.end_col_offset
+        if (node.end_lineno is None or node.end_col_offset is None):
+            raise AttributeError("Error will access node attributes")
 
-        if lineno and end_lineno and col_offset and end_col_offset:
-            start: int = lines_offsets[lineno - 1] + col_offset
-            end: int = lines_offsets[end_lineno - 1] + end_col_offset
+        else:
+            start: int = lines_offsets[node.lineno - 1] + node.col_offset
+            end: int = lines_offsets[node.end_lineno - 1] + node.end_col_offset
 
             return start, end
-        # This is unreachable case
-        else:
-            raise AttributeError("Error will access node attributes")
 
     def _split_method_node(
             self,
@@ -294,7 +322,7 @@ class Chunker:
         # Since we going to split the string so we track metadata manually
         global_start_idx: int
 
-        global_start_idx, _ = Chunker._get_chunk_indexes(source, node)
+        global_start_idx, _ = self._get_chunk_indexes(source, node)
 
         text_code: str | None = ast.get_source_segment(
                 source=source, node=node
