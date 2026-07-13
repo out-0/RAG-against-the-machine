@@ -19,12 +19,14 @@ class Chunker:
     """
     """
 
-    def __init__(self, files: list[Document]) -> None:
+    def __init__(self, files: list[Document], max_size: int) -> None:
         """"""
         self.files: list[Document] = files
 
         # Just for incremental ids
         self.id_generator: itertools.count[int] = itertools.count()
+
+        self.max_size: int = max_size
 
     def chunk_python_file(self, file: Document) -> None:
         """"""
@@ -57,18 +59,20 @@ class Chunker:
 
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 # Extracting the real source code of a node
-                code_text: str | None = ast.get_source_segment(file.content, node)
+                code_text: str | None = ast.get_source_segment(
+                        source=file.content, node=node
+                )
 
-                if code_text and len(code_text) <= args.max_chunk_size:
+                if code_text and len(code_text) <= self.max_size:
                     # Extracting some metadata
-                    start_idx, end_idx = Chunker.get_node_char_range(
-                        node=node, lines_offsets=lines_offsets
+                    start_idx, end_idx = Chunker._get_chunk_indexes(
+                            source=file.content, node=node
                     )
                     chunk: Chunk = Chunk(
                         id=next(self.id_generator),
                         content=code_text,
                         start_index=start_idx,
-                        end_indext=end_idx
+                        end_indext=end_idx,
                     )
                     chunks.append(chunk)
 
@@ -123,15 +127,24 @@ class Chunker:
         self, 
         node: ast.AST,
         source_file: str,
-        max_chunk_size:int
+        max_size:int,
     ) -> None:
         """"""
         # If node is A class, we spit its methods and shrink some of them later
         # for optimization
         # If node i itself a method, we split its lines and shrunk
+        #
+        
+        splited_chunks: list[Chunk] = []
 
-        splited_chunks = []
-        pass
+        if isinstance(node, ast.ClassDef):
+            splited_chunks.extend(
+                    self._split_class_node(
+                        node=node,
+                        source_file=source_file,
+                        max_size=max_size,
+                    )
+            )
 
     def _split_class_node(
             self,
