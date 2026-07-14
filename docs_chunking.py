@@ -5,6 +5,7 @@ import ast
 from dataclasses import dataclass
 import itertools
 from re import split
+from tracemalloc import start
 from documents_loading import Document
 
 
@@ -95,7 +96,7 @@ class Chunker:
                 # Too big, split, handle seperatly
                 else:
                     splited_chunks.extend(
-                        self.split_oversized_node(
+                        self._split_oversized_node(
                             node=node,
                             source_file=source_file.content,
                             max_size=self.max_size,
@@ -153,10 +154,37 @@ class Chunker:
         Return:
             - list of chunks that got splited and maintained max size.
         """
+        import re
+
+
+        sections: list[tuple[int, int]] = []
+
+        # Extract the start indexes of headers by maching with regix
+        header_positions: list[int] = [header.start() for header in re.finditer(r"^#{1,6} ", source_file.content, re.MULTILINE)]
+        # Add extra entry to benefit later below
+        header_positions.append(len(source_file.content))
+
+        # Collect the start / end indexes of each session (header)
+        for i in range(len(header_positions) - 1):
+            start_idx = header_positions[i]
+            end_idx = header_positions[i + 1]
+
+            # Handle if a chunk is oversized
+            if (end_idx - start_idx) > self.max_size:
+                new_slices: list[tuple[int, int]] = self._split_markdown_section(
+                    source_text=source_file.content,
+                    chunk_start_idx=start_idx,
+                    chunk_end_idx=end_idx,
+                )
+                sections.extend(new_slices)
+                continue
+            sections.append((start_idx, end_idx))
 
         # TODO: MOVE THE IMPORTS LATER TO THE TOP FILE
+        # TODO: REMOVE THEM LATER SINCE AM GOING WITH MANUAL SPLITER
         from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter, MarkdownHeaderTextSplitter
         from langchain_core.documents import Document as langc_document
+
 
         splited_chunks: list[Chunk] = []
 
@@ -177,11 +205,25 @@ class Chunker:
         print(md_header_splits[0].page_content)
         print(len(md_header_splits[0].page_content))
 
+
+        recursive_spliter = RecursiveCharacterTextSplitter(
+            chunk_size=self.max_size,
+            chunk_overlap=0
+        )
+
+        #TODO: I need to track the indexes of the chunk
         for chunk in md_header_splits:
-            if len(chunk.page_content) > self.max_size:
-                print("Found huge chunk")
+            idx = source_file.content.find(chunk.page_content)
+            print(idx != -1)
+            #if len(chunk.page_content) > self.max_size:
+            #    print("Found huge chunk")
+        #recursive_spliter.split_text(text=source_file.content)
 
         return splited_chunks
+
+    def _split_markdown_section(self) -> list[tuple[int, int]]:
+        """"""
+        pass
 
 
     def process_files(self) -> list[Chunk]:
@@ -203,7 +245,7 @@ class Chunker:
 
         return splited_chunks
 
-    def split_oversized_node(
+    def _split_oversized_node(
         self,
         node: ast.AST,
         source_file: str,
@@ -374,7 +416,7 @@ class Chunker:
         text_code: str | None = ast.get_source_segment(source=source, node=node)
         # Just defensive
         if text_code:
-            splited_lines: list[str] = text_code.splitlines()
+            splited_lines: list[str] = text_code.splitlines(keepends=True) # TODO: CHECK CORRECTNESS LATER
 
         else:
             raise AttributeError("Error while getting source segment")
