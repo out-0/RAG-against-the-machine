@@ -11,8 +11,8 @@ from documents_loading import Document
 class Chunk:
     id: int
     content: str
-    start_index: int
-    end_index: int
+    start_index: int | None = None
+    end_index: int | None = None
 
 class Chunker:
     """
@@ -34,12 +34,6 @@ class Chunker:
         # This for major functionality of python like (class's, functions)
         splited_chunks: list[Chunk] = []
 
-        # This for the rest of things in a pyhthon code (imports, globals)
-        outscoop_code: list[str] = []
-
-        one_chunk: str = ""
-
-
         # TODO: PUT IMPORTS WITH WITH EVERY CHUNK FOR MORE CONTEXT,
         #
         # edit: Since doing that while handling and respecting the max size
@@ -51,30 +45,36 @@ class Chunker:
         # imports: str = "\n".join(imports_tmp)
 
         # Iterate over the nodes from three (AST)
+
+
+        # Track the start and end indexes of the code
+        # that not (class|funs)
+        outscoop_start_idx: int | None = None
+        outscoop_end_idx: int | None = None
+
         for node in ast.iter_child_nodes(tree):
-            node_start_idx, _ = self._get_chunk_indexes(
+            node_start_idx, node_end_idx  = self._get_chunk_indexes(
                     source=source_file.content,
                     node=node,
                 )
-            chunk_start_idx: int = node_start_idx
 
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
 
                 # Check if there is already something
                 # accumulated so we append it first
-                if outscoop_code:
-                    temp: str
-                    temp = "\n".join(outscoop_code)
+                if outscoop_start_idx is not None:
                     splited_chunks.append(
                             Chunk(
                                 id=next(self.id_generator),
-                                content=temp,
-                                start_index=chunk_start_idx, # TODO: CHECK LATER IF ITS COORECT
-                                end_index=chunk_start_idx + len(temp),
+                                content=(
+                                    source_file.content[outscoop_start_idx: 
+                                                        outscoop_end_idx]
+                                ),
+                                start_index=outscoop_start_idx,
+                                end_index=outscoop_end_idx,
                                 )
                             )
-                    outscoop_code = []
-                    chunk_start_idx= len(temp) + 1
+                    outscoop_start_idx = None
 
                 # Extracting the real source code of a node
                 code_text: str | None = ast.get_source_segment(
@@ -106,45 +106,67 @@ class Chunker:
             # Collect other compenents
             # TODO: Set a minimum limit for chunk size
             else:
-                code_text: str | None = ast.get_source_segment(
+                code_text = ast.get_source_segment(
                     source=source_file.content, node=node
                 )
                 # Just a defensive.
                 if not code_text:
                     continue
-                if len(code_text) + len(outscoop_code) >= self.max_size:
+
+                if outscoop_start_idx is None:
+                    outscoop_start_idx = node_start_idx
+
+                elif (node_end_idx - outscoop_start_idx) > self.max_size:
                     splited_chunks.append(
                         Chunk(
                             id=next(self.id_generator),
-                            content=code_text,
-                            start_index=-1, # TODO: 
-                            end_index=-1,
+                            content=source_file.content[outscoop_start_idx:
+                                                        outscoop_end_idx],
+                            start_index=outscoop_start_idx,
+                            end_index=outscoop_end_idx,
                             )
                         )
-                    one_chunk = code_text
-                    #TODO: UPDATE START IDX SICNE WE DONT WITH THE OLD CHUNK
-                else:
-                    one_chunk = "\n".join([one_chunk, code_text])
+                    outscoop_start_idx = node_start_idx
 
-        exit()
+            outscoop_end_idx = node_end_idx
+
+        # Register whatever left here
+        if outscoop_start_idx:
+            splited_chunks.append(
+                Chunk(
+                    id=next(self.id_generator),
+                    content=source_file.content[outscoop_start_idx:
+                                                outscoop_end_idx],
+                    start_index=outscoop_start_idx,
+                    end_index=outscoop_end_idx,
+                )
+            )
+        return splited_chunks
+
 
     def chunk_markdown_file(self, file: Document) -> None:
         """"""
         pass
 
-    def process_files(self) -> None:
+    def process_files(self) -> list[Chunk]:
         """"""
 
+        splited_chunks: list[Chunk] = []
+
         for file in self.files:
+
+            print(file.extension)
             match file.extension:
                 case ".py":
-                    chunks: list[Chunk] = self.chunk_python_file(file)
+                    splited_chunks = self.chunk_python_file(file)
                 case ".md":
                     pass
                 # chunks: list[Chunk] = self.chunk_markdown_file(file)
                 case _:
                     # This default should not reached for the current situation
                     pass
+
+        return splited_chunks
 
     def split_oversized_node(
         self, 
@@ -252,7 +274,7 @@ class Chunker:
 
 
     # @staticmethod
-    def _get_chunk_indexes(self, source: str, node: ast.stmt | ast.AST) -> tuple[int, int]:
+    def _get_chunk_indexes(self, source: str, node: ast.stmt) -> tuple[int, int]:
         """For calculating the start index and end index of a chunk
         withing a file we are using some properties that AST already
         using internally (node.lineno | node.col_offset | node.end_lineno
