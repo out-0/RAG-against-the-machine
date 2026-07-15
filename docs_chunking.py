@@ -1,12 +1,12 @@
 # TODO: CREATE ONE SPLITER BY THE PYTHON CODE TEXT SPLITER FROM LANGCHAIN
 # TODO: CREATE ANOTHER ONE USING AST (ABSTRACT SYNTAX TREE)
 # TODO: SET A LIMIT TO SOMETHING LIKE 100 SO IF ITS <= JUST CHUNK 100 DIRECTLY
+# TODO: SET A GLOBAL GARDE WHICH IF THE SIZE <= 100 WE JSUT LOOP ON THE FILE AND CHUNK A NONESENCE BLOCK OF 100 CHAR
 import ast
 from dataclasses import dataclass
 import itertools
-from re import split
-from tracemalloc import start
 from documents_loading import Document
+import re
 
 
 @dataclass
@@ -18,19 +18,36 @@ class Chunk:
 
 
 class Chunker:
-    """ """
+    """Chunker class that manual handle spliting python | markdown files withing
+    required max size for chunk.
+
+    For python files its based on AST which a builtin feature instead of external
+    library,
+    Also spliting lines based for markdown files since one requirement is tracking
+    start | end indexes of each chunk which is missing if we relay on external
+    chunking liraries.
+    """
 
     def __init__(self, files: list[Document], max_size: int) -> None:
-        """"""
+        """Accepting the list of documents targeted and max size
+        for splited chunks.
+        """
         self.files: list[Document] = files
-
         # Just for incremental ids
         self.id_generator: itertools.count[int] = itertools.count(start=1)
-
         self.max_size: int = max_size
 
     def chunk_python_file(self, source_file: Document) -> list[Chunk]:
-        """"""
+        """Spliting a python file based on nodes constracted from
+        Abstrac syntax tree, with a basic strategy:
+
+        If node is a class, we check if its oversized, if yes we split
+        it based on its internal methods, if method itself is oversized
+        we fall back to spliting the method into lines and start shrink
+        the lines while respecting max size,
+        Anything not class of function is collected isolated as one chunk
+        (ex. imports, globals...etc)
+        """
         tree: ast.Module = ast.parse(source=source_file.content)
 
         # This for major functionality of python like (class's, functions)
@@ -45,8 +62,6 @@ class Chunker:
         # imports_tmp: list[str] = [ast.unparse(n) for n in tree.body
         #                      if isinstance(n, (ast.Import, ast.ImportFrom))]
         # imports: str = "\n".join(imports_tmp)
-
-        # Iterate over the nodes from three (AST)
 
         # Track the start and end indexes of the code
         # that not (class|funs)
@@ -154,13 +169,15 @@ class Chunker:
         Return:
             - list of chunks that got splited and maintained max size.
         """
-        import re
-
 
         sections: list[tuple[int, int]] = []
+        splited_chunks: list[Chunk] = []
 
         # Extract the start indexes of headers by maching with regix
-        header_positions: list[int] = [header.start() for header in re.finditer(r"^#{1,6} ", source_file.content, re.MULTILINE)]
+        header_positions: list[int] = [
+            header.start()
+            for header in re.finditer(r"^#{1,6} ", source_file.content, re.MULTILINE)
+        ]
         # Add extra entry to benefit later below
         header_positions.append(len(source_file.content))
 
@@ -180,55 +197,58 @@ class Chunker:
                 continue
             sections.append((start_idx, end_idx))
 
-        # TODO: MOVE THE IMPORTS LATER TO THE TOP FILE
-        # TODO: REMOVE THEM LATER SINCE AM GOING WITH MANUAL SPLITER
-        from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter, MarkdownHeaderTextSplitter
-        from langchain_core.documents import Document as langc_document
-
-
-        splited_chunks: list[Chunk] = []
-
-        headers_to_split_on: list[tuple[str, str]]= [
-                ("#", "Header 1"),
-                ("##", "Header 2"),
-                ("###", "Header 3"),
-        ]
-
-        spliter: MarkdownHeaderTextSplitter = MarkdownHeaderTextSplitter(
-                headers_to_split_on=headers_to_split_on,
-                strip_headers=False,
+        # Iter over slices and build the actual chunks
+        for slice in sections:
+            start_idx, end_idx = slice
+            splited_chunks.append(
+                Chunk(
+                    id=next(self.id_generator),
+                    content=source_file.content[start_idx:end_idx],
+                    start_index=start_idx,
+                    end_index=end_idx,
                 )
-        md_header_splits: list[langc_document] = spliter.split_text(
-                source_file.content
-        )
-        print(len(md_header_splits))
-        print(md_header_splits[0].page_content)
-        print(len(md_header_splits[0].page_content))
-
-
-        recursive_spliter = RecursiveCharacterTextSplitter(
-            chunk_size=self.max_size,
-            chunk_overlap=0
-        )
-
-        #TODO: I need to track the indexes of the chunk
-        for chunk in md_header_splits:
-            idx = source_file.content.find(chunk.page_content)
-            print(idx != -1)
-            #if len(chunk.page_content) > self.max_size:
-            #    print("Found huge chunk")
-        #recursive_spliter.split_text(text=source_file.content)
+            )
 
         return splited_chunks
 
-    def _split_markdown_section(self) -> list[tuple[int, int]]:
-        """"""
-        pass
+    def _split_markdown_section(
+        self,
+        source_text: str,
+        chunk_start_idx: int,
+        chunk_end_idx: int,
+    ) -> list[tuple[int, int]]:
+        """Split an oversized markdown section into smaller slices,
+        tracked purely as (start, end) character offsets.
 
+        Arguments:
+            - source_text: source file that we working on
+            - chunk_start_idx: index of start of that oversized chunk
+            - chunk_end_idx: index of end of that oversized chunk
+
+        Return:
+            - list of tuples that indicate the slices of that oversized chunk
+        """
+        section_text: str = source_text[chunk_start_idx:chunk_end_idx]
+        lines: list[str] = section_text.splitlines(keepends=True)
+
+        slices: list[tuple[int, int]] = []
+        cursor: int = chunk_start_idx
+        current_len: int = 0
+
+        for line in lines:
+            if current_len + len(line) > self.max_size and current_len > 0:
+                slices.append((cursor, cursor + current_len))
+                cursor += current_len
+                current_len = 0
+            current_len += len(line)
+
+        if current_len > 0:
+            slices.append((cursor, cursor + current_len))
+
+        return slices
 
     def process_files(self) -> list[Chunk]:
         """"""
-
         splited_chunks: list[Chunk] = []
 
         for file in self.files:
@@ -237,8 +257,6 @@ class Chunker:
                     splited_chunks.extend(self.chunk_python_file(file))
                 case ".md":
                     splited_chunks.extend(self.chunk_markdown_file(file))
-                    pass
-                # chunks: list[Chunk] = self.chunk_markdown_file(file)
                 case _:
                     # This default should not reached for the current situation
                     pass
@@ -416,7 +434,9 @@ class Chunker:
         text_code: str | None = ast.get_source_segment(source=source, node=node)
         # Just defensive
         if text_code:
-            splited_lines: list[str] = text_code.splitlines(keepends=True) # TODO: CHECK CORRECTNESS LATER
+            splited_lines: list[str] = text_code.splitlines(
+                keepends=True
+            )  # TODO: CHECK CORRECTNESS LATER
 
         else:
             raise AttributeError("Error while getting source segment")
@@ -424,8 +444,8 @@ class Chunker:
         cursor: int = global_start_idx
 
         for line in splited_lines:
-            if len(one_chunk + line) < max_size:
-                one_chunk = line if one_chunk == "" else "\n".join([one_chunk, line])
+            if len(one_chunk + line) <= max_size:
+                one_chunk = "".join([one_chunk, line])
 
             # If its wll exceed then we just take current chunk
             else:
