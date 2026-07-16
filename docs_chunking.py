@@ -1,7 +1,3 @@
-# TODO: CREATE ONE SPLITER BY THE PYTHON CODE TEXT SPLITER FROM LANGCHAIN
-# TODO: CREATE ANOTHER ONE USING AST (ABSTRACT SYNTAX TREE)
-# TODO: SET A LIMIT TO SOMETHING LIKE 100 SO IF ITS <= JUST CHUNK 100 DIRECTLY
-# TODO: SET A GLOBAL GARDE WHICH IF THE SIZE <= 100 WE JSUT LOOP ON THE FILE AND CHUNK A NONESENCE BLOCK OF 100 CHAR
 import ast
 from dataclasses import dataclass
 import itertools
@@ -126,9 +122,36 @@ class Chunker:
                 if not code_text:
                     continue
 
+                node_len: int = node_end_idx - node_start_idx
+                if node_len > self.max_size:
+                    # flush whatever was accumulating before this node
+                    if outscoop_start_idx is not None:
+                        splited_chunks.append(
+                            Chunk(
+                                id=next(self.id_generator),
+                                content=source_file.content[
+                                    outscoop_start_idx:outscoop_end_idx
+                                ],
+                                start_index=outscoop_start_idx,
+                                end_index=outscoop_end_idx,
+                            )
+                        )
+                    outscoop_start_idx = None
+                    # split this oversized node on its own, same fallback as methods
+                    # Even if node is not method its still splited same way
+                    splited_chunks.extend(
+                        self._split_method_node(
+                            source=source_file.content,
+                            node=node,
+                            max_size=self.max_size,
+                        )
+                    )
+                    continue
+
                 if outscoop_start_idx is None:
                     outscoop_start_idx = node_start_idx
 
+                # If concatinating will result on oversized
                 elif (node_end_idx - outscoop_start_idx) > self.max_size:
                     splited_chunks.append(
                         Chunk(
