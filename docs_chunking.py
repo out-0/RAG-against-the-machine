@@ -118,7 +118,6 @@ class Chunker:
                         )
                     )
             # Collect other compenents
-            # TODO: Set a minimum limit for chunk size
             else:
                 code_text = ast.get_source_segment(
                     source=source_file.content, node=node
@@ -449,7 +448,11 @@ class Chunker:
                     cursor += current_len
                     current_len = 0
                 # then handle the oversized line on its own
-                slices.extend(self._arbitrary_chunking(line, cursor, max_size))
+                slices.extend(
+                    self._arbitrary_chunking(
+                        line_text=line, start_offset=cursor, max_size=max_size
+                    )
+                )
                 cursor += len(line)
                 continue
 
