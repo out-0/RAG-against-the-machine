@@ -248,7 +248,12 @@ class Chunker:
         return slices
 
     def process_files(self) -> list[Chunk]:
-        """"""
+        """Iterate over the files provided and chunk the file based on its
+        type (py | md)
+
+        Returns:
+            - list of the chunks splited
+        """
         splited_chunks: list[Chunk] = []
 
         for file in self.files:
@@ -269,11 +274,19 @@ class Chunker:
         source_file: str,
         max_size: int,
     ) -> list[Chunk]:
-        """"""
-        # If node is A class, we spit its methods and shrink some of them later
-        # for optimization
-        # If node i itself a method, we split its lines and shrunk
-        #
+        """Split AST oversized node,
+        If node is A class, we spit its methods and shrink some of them later
+        for optimization,
+        If node i itself a method, we split its lines and shrunk
+
+        Args:
+            - node: Abstract Syntax Tree node which repersent class or function,
+            - source_file: the source code which node was constructed from,
+            - max_size: mas size allwowed for a chunk.
+
+        Returns:
+            - list of splited chunks
+        """
 
         splited_chunks: list[Chunk] = []
 
@@ -297,68 +310,63 @@ class Chunker:
     def _split_class_node(
         self, node: ast.ClassDef, source_file: str, max_size: int
     ) -> list[Chunk]:
-        """"""
+        """Split a class node into methods blocks,
+        if a method itself is an oversized then call for spliting the method
+        itself,
 
+        Args:
+            - node : class node extracted from AST
+            - source_file: source code
+            - max_size: max size for a chunk
+
+        Returns:
+            - list of splited chunks
+        """
         all_chunks: list[Chunk] = []
-        one_chunk: str = ""
-
-        # Not set yet, its will updated at the first
-        chunk_start_idx: int = -1
+        slices: list[tuple[int, int]] = []
+        chunk_start: int | None = None
+        chunk_end: int = 0
 
         for method_node in node.body:
-            text_code: str | None = ast.get_source_segment(
-                source=source_file, node=node
-            )
-
-            if text_code is None:
-                raise ValueError("Error while extracting source segment")
-
-            node_start_idx: int
-            node_start_idx, _ = self._get_chunk_indexes(
+            node_start, node_end = self._get_chunk_indexes(
                 source=source_file, node=method_node
             )
+            node_len: int = node_end - node_start
 
-            # Check if the chunk not excedding the max size
-            if len(text_code) < max_size:
-                # Check if concatinating them will result to oversized
-                # This case is not reached at the very first iter
-                if len(one_chunk + text_code) > max_size:
-                    all_chunks.append(
-                        Chunk(
-                            id=next(self.id_generator),
-                            content=one_chunk,
-                            start_index=chunk_start_idx,
-                            end_index=chunk_start_idx + len(one_chunk),
-                        )
+            if node_len > max_size:
+                # Check first if we already have something accumulated
+                if chunk_start is not None:
+                    slices.append((chunk_start, chunk_end))
+                    chunk_start = None
+                # Then now splite class node into methods
+                all_chunks.extend(
+                    self._split_method_node(
+                        source=source_file, node=method_node, max_size=max_size
                     )
-                    one_chunk = text_code
-                    chunk_start_idx = node_start_idx
-
-                else:
-                    if one_chunk == "":
-                        one_chunk = text_code
-                        chunk_start_idx = node_start_idx
-
-                    else:
-                        one_chunk = "\n".join([one_chunk, text_code])
-
-            # If method is too long we split it
-            else:
-                method_chunks: list[Chunk] = self._split_method_node(
-                    source=source_file, node=method_node, max_size=max_size
                 )
-                all_chunks.extend(method_chunks)
+                continue
 
-        if one_chunk:
-            all_chunks.append(
-                Chunk(
-                    id=next(self.id_generator),
-                    content=one_chunk,
-                    start_index=chunk_start_idx,
-                    end_index=chunk_start_idx + len(one_chunk),
-                )
+            # If shrinking will oversized we take the already shrinked
+            if chunk_start is not None and (node_end - chunk_start) > max_size:
+                slices.append((chunk_start, chunk_end))
+                chunk_start = node_start
+            elif chunk_start is None:
+                chunk_start = node_start
+
+            chunk_end = node_end
+
+        if chunk_start is not None:
+            slices.append((chunk_start, chunk_end))
+
+        all_chunks.extend(
+            Chunk(
+                id=next(self.id_generator),
+                content=source_file[start:end],
+                start_index=start,
+                end_index=end,
             )
-
+            for start, end in slices
+        )
         return all_chunks
 
     # @staticmethod
@@ -423,52 +431,72 @@ class Chunker:
         Return:
             - list of small chunks that respect max size
         """
-        all_chunks: list[Chunk] = []
-        one_chunk: str = ""
-
-        # Since we going to split the string so we track metadata manually
-        global_start_idx: int
-
         global_start_idx, _ = self._get_chunk_indexes(source, node)
-
         text_code: str | None = ast.get_source_segment(source=source, node=node)
-        # Just defensive
-        if text_code:
-            splited_lines: list[str] = text_code.splitlines(
-                keepends=True
-            )  # TODO: CHECK CORRECTNESS LATER
-
-        else:
+        if text_code is None:
             raise AttributeError("Error while getting source segment")
 
+        lines: list[str] = text_code.splitlines(keepends=True)
+        slices: list[tuple[int, int]] = []
         cursor: int = global_start_idx
+        current_len: int = 0
 
-        for line in splited_lines:
-            if len(one_chunk + line) <= max_size:
-                one_chunk = "".join([one_chunk, line])
+        for line in lines:
+            if len(line) > max_size:
+                # flush whatever accumulated so far first
+                if current_len > 0:
+                    slices.append((cursor, cursor + current_len))
+                    cursor += current_len
+                    current_len = 0
+                # then handle the oversized line on its own
+                slices.extend(self._arbitrary_chunking(line, cursor, max_size))
+                cursor += len(line)
+                continue
 
-            # If its wll exceed then we just take current chunk
-            else:
-                all_chunks.append(
-                    Chunk(
-                        id=next(self.id_generator),
-                        content=one_chunk,
-                        start_index=cursor,
-                        end_index=cursor + len(one_chunk),
-                    )
-                )
-                # Update the indexes for the next chunks.
-                cursor += len(one_chunk) + 1
-                one_chunk = line
+            if current_len + len(line) > max_size:
+                slices.append((cursor, cursor + current_len))
+                cursor += current_len
+                current_len = 0
 
-        if one_chunk:
-            all_chunks.append(
-                Chunk(
-                    id=next(self.id_generator),
-                    content=one_chunk,
-                    start_index=cursor,
-                    end_index=cursor + len(one_chunk),
-                )
+            current_len += len(line)
+
+        if current_len > 0:
+            slices.append((cursor, cursor + current_len))
+
+        return [
+            Chunk(
+                id=next(self.id_generator),
+                content=source[start:end],
+                start_index=start,
+                end_index=end,
             )
+            for start, end in slices
+        ]
 
-        return all_chunks
+    def _arbitrary_chunking(
+        self,
+        line_text: str,
+        start_offset: int,
+        max_size: int,
+    ) -> list[tuple[int, int]]:
+        """This is last fallbacl which triggered if the line based
+        splitting got the lines themself oversized so we fallback
+        to shunking based on the max size,
+
+        Basicaly we split the line into chunks that respect max size
+
+        Args:
+            - line_text: the line we want to split
+            - start_offset: starting index withing the real file not just line
+            - max_size: max character length for a slice
+        Returns:
+            - slices chunked
+        """
+
+        slices: list[tuple[int, int]] = []
+        for i in range(0, len(line_text), max_size):
+            chunk_start: int = i + start_offset
+            chunk_end: int = start_offset + min(i + max_size, len(line_text))
+            slices.append((chunk_start, chunk_end))
+
+        return slices
