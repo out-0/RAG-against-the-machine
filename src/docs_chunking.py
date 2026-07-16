@@ -1,8 +1,9 @@
 import ast
 from dataclasses import dataclass
 import itertools
-from documents_loading import Document
+from src.documents_loading import Document
 import re
+import tqdm
 
 
 @dataclass
@@ -278,7 +279,7 @@ class Chunker:
         """
         splited_chunks: list[Chunk] = []
 
-        for file in self.files:
+        for file in tqdm.tqdm(self.files, desc="Chunking"):
             match file.extension:
                 case ".py":
                     splited_chunks.extend(self.chunk_python_file(file))
