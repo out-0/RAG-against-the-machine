@@ -1,15 +1,91 @@
 import math
-from docs_chunking import Chunk
+from src.docs_chunking import Chunk
 from collections import Counter
 from typing import Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import bm25s
+from pathlib import Path
+import tqdm
 
 
 class Indexer:
-    """"""
+    """Index class wrapper for handling choosed chunking method"""
 
-    pass
+    def __init__(
+        self,
+        chunks: list[Chunk] | None = None,
+        method: str = "bm25",
+        processed_path: str = "data/processed",
+    ) -> None:
+        """Setup indexer to index the chunks of docs and build
+        the lookup table, which can be used later again the query
+        to retrieve the top k docs that relavant to that query
+
+        Args:
+
+
+        Returns:
+
+        """
+
+        if not chunks:
+            raise TypeError("Warrning: Chunks to index is missed")
+
+        self.chunks: list[Chunk] = chunks
+        self.processed_path: str = processed_path
+        self.method: str = method
+
+        # Create the path for the indexed lookup
+        Path(self.processed_path).mkdir(parents=True, exist_ok=True)
+
+        # Extract content from chunks instead of full obj
+        docs: list[str] = [chunk.content for chunk in self.chunks]
+
+        if method == "bm25":
+            # A stimmer ot normalize words
+            # I dont think i need it since we are processing python
+            # and markdown files so normalize generaling thw words
+            # if making it even better to match the text code.
+            #
+            # stemmer = Stemmer.stemmer("english")
+
+            # Tokenize the corpus and only keep the ids
+            # (faster and saves memory)
+            # It may return tokenized obj which hold (ids, vocab)
+            # ids for docs and vocab map each word to id
+            corpus_tokens = bm25s.tokenize(texts=docs)
+
+            # print(docs)
+            # print(type(docs))
+            # print(id_vocab)
+            # print(type(id_vocab))
+
+            # Register the chunks so they got returned later after reteriving
+            retriever: bm25s.BM25 = bm25s.BM25(corpus=list(range(len(self.chunks))))
+
+            # Index the docs
+            retriever.index(corpus=corpus_tokens, show_progress=True)
+
+            print(type(retriever.vocab_dict))
+
+            k = next(iter(retriever.vocab_dict))
+            print(type(k), repr(k))
+
+            # Store it to use it later for retreiving
+            self.bm_retriever = retriever
+
+            # Save the indexing for fast reterival later
+            retriever.save(self.processed_path)
+            exit()
+
+        elif method == "tf_idf":
+            pass
+
+    def bm25_search(self, query: str) -> None:
+        """"""
+
+        pass
 
 
 class TfidfSearch:

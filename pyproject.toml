@@ -1,10 +1,11 @@
 [project]
 name = "RAG-against-the-machine"
 version = "0.1.0"
-description = "RAG system"  # TODO: Update later.
+description = "RAG system"  #TODO: Update later.
 readme = "README.md"
 requires-python = ">=3.12.13" # The dataset we got is using some tricks that just allowed for >= 3.12
 dependencies = [
+    "bm25[core]>=0.3.9",
     "fire>=0.7.1",
     "scikit-learn>=1.9.0",
     "tiktoken>=0.13.0",
