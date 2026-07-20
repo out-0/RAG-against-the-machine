@@ -1,16 +1,29 @@
-import math
 from src.docs_chunking import Chunk
-from collections import Counter
-from typing import Any
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import bm25s
 from pathlib import Path
-import tqdm
+import pickle
 
 
 class Indexer:
-    """Index class wrapper for handling choosed chunking method"""
+    """Index class wrapper for handling choosed chunking method,
+
+    indexing is basically create a special map that link each
+    word to the relevant docs for it after scoring it by a
+    some formules based on the indexing method,
+
+    To simple it, Index the docs internally build a map 'the inverted index'
+    which map a word to list of matching documents and the frequency
+    of that word withing that document, something like:
+    "vllm"      -----> [ Doc 0, Doc 2 ]
+    "paged"     -----> [ Doc 0, Doc 1 ]
+    "uses"      -----> [ Doc 0 ]
+    "attention" -----> [ Doc 0, Doc 1 ]
+
+    Its more than that but,
+    also that is just implied for a lexical indexing like TF-IDF, BM25,
+    But for an embedding its relay on a vectors which kida based on
+    the attensions between the terms or phrases
+    """
 
     def __init__(
         self,
@@ -36,129 +49,48 @@ class Indexer:
         self.processed_path: str = processed_path
         self.method: str = method
 
+        # Run the main index processing
+        self.run()
+
+    def run(self) -> None:
+        """Run the indexer based on the indexing method specified by args
+        if not specified, the default is bm25 which is implemented by
+        bm25s library
+        """
+
         # Create the path for the indexed lookup
         Path(self.processed_path).mkdir(parents=True, exist_ok=True)
 
         # Extract content from chunks instead of full obj
         docs: list[str] = [chunk.content for chunk in self.chunks]
 
-        if method == "bm25":
-            # A stimmer ot normalize words
-            # I dont think i need it since we are processing python
-            # and markdown files so normalize generaling thw words
-            # if making it even better to match the text code.
-            #
+        if self.method == "bm25":
+            # skipped stemming to avoid mangling code identifiers;
+            # may cost a small amount of recall
             # stemmer = Stemmer.stemmer("english")
 
-            # Tokenize the corpus and only keep the ids
-            # (faster and saves memory)
-            # It may return tokenized obj which hold (ids, vocab)
-            # ids for docs and vocab map each word to id
-            corpus_tokens = bm25s.tokenize(texts=docs)
+            corpus_tokens: list[list[str]] | bm25s.tokenization.Tokenized = (
+                bm25s.tokenize(texts=docs, show_progress=True)
+            )
 
-            # print(docs)
-            # print(type(docs))
-            # print(id_vocab)
-            # print(type(id_vocab))
-
-            # Register the chunks so they got returned later after reteriving
-            retriever: bm25s.BM25 = bm25s.BM25(corpus=list(range(len(self.chunks))))
-
-            # Index the docs
+            retriever: bm25s.BM25 = bm25s.BM25()
             retriever.index(corpus=corpus_tokens, show_progress=True)
-
-            print(type(retriever.vocab_dict))
-
-            k = next(iter(retriever.vocab_dict))
-            print(type(k), repr(k))
-
-            # Store it to use it later for retreiving
-            self.bm_retriever = retriever
-
-            # Save the indexing for fast reterival later
             retriever.save(self.processed_path)
-            exit()
 
-        elif method == "tf_idf":
+            # Save chunks as pickle file (binary format) so can
+            # be loaded also later to map result to chunk obj
+            with open(Path(self.processed_path) / "chunks.pkl", "wb") as f:
+                pickle.dump(self.chunks, f)
+
+        elif (
+            self.method == "embedding"
+        ):  # TODO: CHECK AND IMPLEMENT FOR EMBEDDING LATER
             pass
 
-    def bm25_search(self, query: str) -> None:
-        """"""
-
-        pass
-
-
-class TfidfSearch:
-    """Retrieves relevant document chunks using TF-IDF and Cosine Similarity.
-
-    This implementation leverages scikit-learn to handle the TF-IDF calculation
-    as a sparse matrix under the hood. This makes it highly optimized and fast
-    for large corpora (e.g., 20,000+ chunks) compared to pure Python loops.
-    """
-
-    def __init__(self, chunks: list[Chunk]) -> None:
-        """Initializes the TF-IDF matrix based on the provided text chunks.
-
-        Args:
-            chunks: A list of Chunk objects containing the text to be indexed.
-        """
-        if not chunks:
-            self.chunks: list[Chunk] = []
-            self.vectorizer: TfidfVectorizer = TfidfVectorizer()
-            self.tfidf_matrix: Any = self.vectorizer.fit_transform(raw_documents=[""])
-            return
-
-        self.chunks = chunks
-
-        # Extract raw text content from the custom Chunk objects
-        documents: list[str] = [chunk.content for chunk in self.chunks]
-
-        # Initialize the Vectorizer
-        self.vectorizer = TfidfVectorizer(
-            sublinear_tf=True,  # Applies 1 + log(TF) to cap overly frequent terms
-            token_pattern=r"(?u)\b\w\w+\b",  # Standard pattern to grab words with 2+ alphanumeric chars
+        print(
+            f"Ingestion complete! Indexed {len(self.chunks)} "
+            f"chunks under {self.processed_path}"
         )
-
-        # Fit the vectorizer to the documents and create the TF-IDF sparse matrix.
-        self.tfidf_matrix = self.vectorizer.fit_transform(raw_documents=documents)
-
-    def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
-        """Searches the indexed chunks for the most relevant matches to the query.
-
-        Args:
-            query: The search string entered by the user.
-            top_k: The maximum number of top-scoring chunks to return.
-
-        Returns:
-            A list of tuples, where each tuple contains:
-                - The original Chunk object.
-                - Its corresponding cosine similarity score (float).
-            Sorted in descending order of score.
-        """
-        if not self.chunks:
-            return []
-
-        # Transform the user query into a TF-IDF vector using the LEARNED vocabulary.
-        # We must use the exact same vocabulary and IDF weights learned during initialization.
-        query_vector: Any = self.vectorizer.transform([query])
-
-        # Calculate cosine similarity between the query vector and all document vectors.
-        # Returns a 2D array like [[0.12, 0.00, 0.85, 0.04, ...]]
-        similarity_scores: Any = cosine_similarity(query_vector, self.tfidf_matrix)[0]
-
-        # Pair the calculated scores with their corresponding original Chunk objects
-        results: list[tuple[Chunk, float]] = []
-        for index, score in enumerate(similarity_scores):
-            # Only include chunks that have at least some mathematical overlap
-            if score > 0.0:
-                results.append((self.chunks[index], float(score)))
-
-        # Sort the results by score in descending order (highest score first)
-        results.sort(key=lambda x: x[1], reverse=True)
-
-        # Safely slice the top_k results. If fewer results matched than top_k,
-        # it just returns however many it found without throwing a ValueError.
-        return results[:top_k]
 
 
 # class Tf_idf_search:
