@@ -1,17 +1,21 @@
 import ast
-from dataclasses import dataclass
+
+# from dataclasses import dataclass
+from pydantic.dataclasses import dataclass
 import itertools
 from src.documents_loading import Document
 import re
 import tqdm
 
 
+# Using pydantic dataclass to add a layer of validation
 @dataclass
 class Chunk:
     id: int
     content: str
-    start_index: int | None = None
-    end_index: int | None = None
+    start_index: int
+    end_index: int
+    file_path: str
 
 
 class Chunker:
@@ -71,10 +75,16 @@ class Chunker:
                 node=node,
             )
 
+            # WARNING: I HOPE NOT FORGET
+            # TODO: CURRENTLY IF THE NODE IS SMALL THAN THE MAX SIZE ITS WILL JUST CONSTRUCT ITS CHUNK
+            # BUT ITS BETTER TO TRY ALSO TO CONCATINATE IT WITH THE NEXT NODE IF POSSIBLE SO WE AVOID
+            # WASTING SOME SIZE OF CHUNK
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 # Check if there is already something
                 # accumulated so we append it first
                 if outscoop_start_idx is not None:
+                    # Silent checker about outscoop_end_idx possible None
+                    assert outscoop_end_idx is not None
                     splited_chunks.append(
                         Chunk(
                             id=next(self.id_generator),
@@ -83,6 +93,7 @@ class Chunker:
                             ),
                             start_index=outscoop_start_idx,
                             end_index=outscoop_end_idx,
+                            file_path=source_file.path,
                         )
                     )
                     outscoop_start_idx = None
@@ -102,6 +113,7 @@ class Chunker:
                         content=code_text,
                         start_index=start_idx,
                         end_index=end_idx,
+                        file_path=source_file.path,
                     )
                     splited_chunks.append(chunk)
 
@@ -110,7 +122,7 @@ class Chunker:
                     splited_chunks.extend(
                         self._split_oversized_node(
                             node=node,
-                            source_file=source_file.content,
+                            source_file=source_file,
                             max_size=self.max_size,
                         )
                     )
@@ -125,6 +137,7 @@ class Chunker:
 
                 node_len: int = node_end_idx - node_start_idx
                 if node_len > self.max_size:
+                    assert outscoop_end_idx is not None
                     # flush whatever was accumulating before this node
                     if outscoop_start_idx is not None:
                         splited_chunks.append(
@@ -135,6 +148,7 @@ class Chunker:
                                 ],
                                 start_index=outscoop_start_idx,
                                 end_index=outscoop_end_idx,
+                                file_path=source_file.path,
                             )
                         )
                     outscoop_start_idx = None
@@ -142,7 +156,7 @@ class Chunker:
                     # Even if node is not method its still splited same way
                     splited_chunks.extend(
                         self._split_method_node(
-                            source=source_file.content,
+                            source_file=source_file,
                             node=node,
                             max_size=self.max_size,
                         )
@@ -154,6 +168,7 @@ class Chunker:
 
                 # If concatinating will result on oversized
                 elif (node_end_idx - outscoop_start_idx) > self.max_size:
+                    assert outscoop_end_idx is not None
                     splited_chunks.append(
                         Chunk(
                             id=next(self.id_generator),
@@ -162,6 +177,7 @@ class Chunker:
                             ],
                             start_index=outscoop_start_idx,
                             end_index=outscoop_end_idx,
+                            file_path=source_file.path,
                         )
                     )
                     outscoop_start_idx = node_start_idx
@@ -169,13 +185,15 @@ class Chunker:
             outscoop_end_idx = node_end_idx
 
         # Register whatever left here
-        if outscoop_start_idx:
+        if outscoop_start_idx is not None:
+            assert outscoop_end_idx is not None
             splited_chunks.append(
                 Chunk(
                     id=next(self.id_generator),
                     content=source_file.content[outscoop_start_idx:outscoop_end_idx],
                     start_index=outscoop_start_idx,
                     end_index=outscoop_end_idx,
+                    file_path=source_file.path,
                 )
             )
         return splited_chunks
@@ -229,6 +247,7 @@ class Chunker:
                     content=source_file.content[start_idx:end_idx],
                     start_index=start_idx,
                     end_index=end_idx,
+                    file_path=source_file.path,
                 )
             )
 
@@ -294,7 +313,7 @@ class Chunker:
     def _split_oversized_node(
         self,
         node: ast.AST,
-        source_file: str,
+        source_file: Document,
         max_size: int,
     ) -> list[Chunk]:
         """Split AST oversized node,
@@ -324,14 +343,14 @@ class Chunker:
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             splited_chunks.extend(
                 self._split_method_node(
-                    source=source_file, node=node, max_size=max_size
+                    source_file=source_file, node=node, max_size=max_size
                 )
             )
 
         return splited_chunks
 
     def _split_class_node(
-        self, node: ast.ClassDef, source_file: str, max_size: int
+        self, node: ast.ClassDef, source_file: Document, max_size: int
     ) -> list[Chunk]:
         """Split a class node into methods blocks,
         if a method itself is an oversized then call for spliting the method
@@ -352,7 +371,7 @@ class Chunker:
 
         for method_node in node.body:
             node_start, node_end = self._get_chunk_indexes(
-                source=source_file, node=method_node
+                source=source_file.content, node=method_node
             )
             node_len: int = node_end - node_start
 
@@ -364,7 +383,7 @@ class Chunker:
                 # Then now splite class node into methods
                 all_chunks.extend(
                     self._split_method_node(
-                        source=source_file, node=method_node, max_size=max_size
+                        source_file=source_file, node=method_node, max_size=max_size
                     )
                 )
                 continue
@@ -384,9 +403,10 @@ class Chunker:
         all_chunks.extend(
             Chunk(
                 id=next(self.id_generator),
-                content=source_file[start:end],
+                content=source_file.content[start:end],
                 start_index=start,
                 end_index=end,
+                file_path=source_file.path,
             )
             for start, end in slices
         )
@@ -434,7 +454,7 @@ class Chunker:
             return start, end
 
     def _split_method_node(
-        self, source: str, node: ast.stmt, max_size: int
+        self, source_file: Document, node: ast.stmt, max_size: int
     ) -> list[Chunk]:
         """Split a method into lines and shrunk them after that while
         keep respecting the max size.
@@ -454,8 +474,10 @@ class Chunker:
         Return:
             - list of small chunks that respect max size
         """
-        global_start_idx, _ = self._get_chunk_indexes(source, node)
-        text_code: str | None = ast.get_source_segment(source=source, node=node)
+        global_start_idx, _ = self._get_chunk_indexes(source_file.content, node)
+        text_code: str | None = ast.get_source_segment(
+            source=source_file.content, node=node
+        )
         if text_code is None:
             raise AttributeError("Error while getting source segment")
 
@@ -493,9 +515,10 @@ class Chunker:
         return [
             Chunk(
                 id=next(self.id_generator),
-                content=source[start:end],
+                content=source_file.content[start:end],
                 start_index=start,
                 end_index=end,
+                file_path=source_file.path,
             )
             for start, end in slices
         ]
