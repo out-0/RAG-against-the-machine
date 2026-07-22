@@ -19,3 +19,9 @@ Build a Retrieval-Augmented Generation system that answers questions about codeb
     Number of Layers: 28
     Number of Attention Heads (GQA): 16 for Q and 8 for KV
     Context Length: 32,768
+
+
+
+BM25:
+###### Formula:
+![BM25 Formula png](./assets/bm25_formula.png)
