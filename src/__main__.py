@@ -1,14 +1,21 @@
+# TODO: IMPLEMENT DOCSTRINGS LATER
 import fire
-import tqdm
 import json
 from pathlib import Path
 import bm25s
 
+from src.data_models import RagDataset
 from src.docs_chunking import Chunk, Chunker
 from src.documents_loading import Document, load_files
 from src.indexer import indexing
 from src.search import load_retriever, search_one, search_batch
-from src.data_models import MinimalSource, AnsweredQuestion, UnansweredQuestion
+from src.data_models import (
+    MinimalSource,
+    AnsweredQuestion,
+    UnansweredQuestion,
+    MinimalSearchResults,
+    StudentSearchResults,
+)
 
 
 class Boss:
@@ -39,11 +46,14 @@ class Boss:
             # Run the main index processing
             indexing(chunks=chunks, processed_path=processed_path, method=method)
         except Exception as e:
-            print(e)
+            print(f"{type(e).__name__}: {e}")
             exit()
 
     def search(
-        self, query: str, k: int = 1, processed_path: str = "data/processed/"
+        self,
+        query: str,
+        k: int = 1,
+        processed_path: str = "data/processed/",
     ) -> None:
         """"""
 
@@ -65,10 +75,10 @@ class Boss:
             query=query, k=k, retriever=retriever, chunks=chunks
         )
 
-        # Print the formated results
+        # Validate each chunk by a MinimalSource model and print the formate required
         for chunk in results:
-            # Validating
-            validated_chunk = MinimalSource(
+            # Validating chunk
+            validated_chunk: MinimalSource = MinimalSource(
                 file_path=chunk.file_path,
                 first_character_index=chunk.start_index,
                 last_character_index=chunk.end_index,
@@ -85,7 +95,17 @@ class Boss:
         save_directory: str = "data/output/search_results/UnansweredQuestions",
         processed_path: str = "data/processed/",
     ) -> None:
-        pass
+        # TODO: IMPROVE LATER
+        """
+        Reach a batch of questions from the provided dataset path and operate search
+        over all of them after validating the loaded questions,
+
+        Args:
+
+        Returns:
+
+
+        """
 
         # Check if dataset exist and can be opened
         try:
@@ -126,23 +146,59 @@ class Boss:
         elif questions_scope == "UnansweredQuestions":
             ValidatorModel = UnansweredQuestion
         else:
-            # Unrechable case
-            print("BOOOYAKACHAAH something happen from nowhere")
+            # Unreachable case, save to remove
+            print("BOYAAA: SOMETHING HAPPEN FROM NOWHERE, GOOD LUCK FIGURE IT OUT")
             exit()
 
-        # Validate the questions AND build a list of questions to be used in retrieving
+        # Validate each question AND build a list of questions to be used in retrieving
         batch_questions: list[str] = []
+        validated_batch: list[ValidatorModel] = []
         for q in dataset_data["rag_questions"]:
-            ValidatorModel.model_validate(q)
+            validated_batch.append(ValidatorModel.model_validate(q))
             batch_questions.append(q["question"])
+
+        # Now Validate the full questions batch (Rag dataset)
+        _: RagDataset = RagDataset(rag_questions=validated_batch)
 
         # Load the indexed files
         retriever, chunks = load_retriever(processed_path)
         batch_results: list[list[Chunk]] = search_batch(
-            queries=batch_questions, k=k, retriever=retriever, chunks=chunks
+            queries=batch_questions,
+            k=k,
+            retriever=retriever,
+            chunks=chunks,
         )
 
-        print(questions_scope)
+        # THE TARGET IS TO BUILD StudentSearchResults obj, to do that:
+        # Validate the search result chunks by [MinimalSource] AND
+        # Validate and build [MinimalSearchResults] which represent
+        # to search result for a single question and by collect all
+        # the required ones we can build StudentSearchResults,
+        boss_search_result: StudentSearchResults = StudentSearchResults(
+            search_results=[], k=k
+        )
+
+        # Iterate over each question
+        for i, question_result in enumerate(batch_results):
+            mini_search_result: MinimalSearchResults = MinimalSearchResults(
+                question_id=validated_batch[i].question_id,
+                question=validated_batch[i].question,
+                retrieved_sources=[],
+            )
+            # Collect the validated chunks [MinimalSource]
+            # Validate the chunks retrieved as result
+            for chunk in question_result:
+                mini_search_result.retrieved_sources.append(
+                    MinimalSource(
+                        file_path=chunk.file_path,
+                        first_character_index=chunk.start_index,
+                        last_character_index=chunk.end_index,
+                    )
+                )
+            boss_search_result.search_results.append(mini_search_result)
+
+        print(boss_search_result)
+        print(type(boss_search_result))
 
         # TODO: WRITE THE RESULT OR EMBED IT
 
