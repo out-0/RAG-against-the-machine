@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from pydantic import Field
+import uuid
 
 
 class MinimalSource(BaseModel):
@@ -20,6 +21,13 @@ class AnsweredQuestion(UnansweredQuestion):
 
 class RagDataset(BaseModel):
     rag_questions: list[AnsweredQuestion | UnansweredQuestion]
+
+    # def __getitem__(self, index: int) -> AnsweredQuestion | UnansweredQuestion:
+    #     """Add it to allow indexing the instances of that class
+    #
+    #     so later i can do 'dataset.rag_questions[i]'
+    #     """
+    #     return self.rag_questions[index]
 
 
 class MinimalSearchResults(BaseModel):
