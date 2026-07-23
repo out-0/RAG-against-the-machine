@@ -84,7 +84,9 @@ class Chunker:
                 # accumulated so we append it first
                 if outscoop_start_idx is not None:
                     # Silent checker about outscoop_end_idx possible None
-                    assert outscoop_end_idx is not None
+                    assert outscoop_end_idx is not None, (
+                        "Error: outscoop_end_idx is firing"
+                    )
                     splited_chunks.append(
                         Chunk(
                             id=next(self.id_generator),
@@ -137,9 +139,11 @@ class Chunker:
 
                 node_len: int = node_end_idx - node_start_idx
                 if node_len > self.max_size:
-                    assert outscoop_end_idx is not None
                     # flush whatever was accumulating before this node
                     if outscoop_start_idx is not None:
+                        assert outscoop_end_idx is not None, (
+                            "Error: outscoop_end_idx is firing"
+                        )
                         splited_chunks.append(
                             Chunk(
                                 id=next(self.id_generator),
@@ -168,7 +172,9 @@ class Chunker:
 
                 # If concatinating will result on oversized
                 elif (node_end_idx - outscoop_start_idx) > self.max_size:
-                    assert outscoop_end_idx is not None
+                    assert outscoop_end_idx is not None, (
+                        "Error: outscoop_end_idx is firing"
+                    )
                     splited_chunks.append(
                         Chunk(
                             id=next(self.id_generator),
@@ -186,7 +192,7 @@ class Chunker:
 
         # Register whatever left here
         if outscoop_start_idx is not None:
-            assert outscoop_end_idx is not None
+            assert outscoop_end_idx is not None, "Error: outscoop_end_idx is firing"
             splited_chunks.append(
                 Chunk(
                     id=next(self.id_generator),
