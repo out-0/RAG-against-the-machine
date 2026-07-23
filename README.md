@@ -8,6 +8,7 @@ Build a Retrieval-Augmented Generation system that answers questions about codeb
 - [RAG from scratch](https://www.youtube.com/watch?v=sVcwVQRHIc8&t=647s)
 - [Data chunking strategies](https://developer.ibm.com/articles/awb-enhancing-rag-performance-chunking-strategies/)
 - [Grounded generation](https://zeroentropy.dev/concepts/grounded-generation/)
+- [Embeddings](https://www.youtube.com/watch?v=v6g8eo86T8A)
 
 **Model Overview**
 *Qwen3-0.6B has the following features:*
@@ -22,6 +23,6 @@ Build a Retrieval-Augmented Generation system that answers questions about codeb
 
 
 
-BM25:
+#### BM25:
 ###### Formula:
 ![BM25 Formula png](./assets/bm25_formula.png)
