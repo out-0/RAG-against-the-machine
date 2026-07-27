@@ -1,14 +1,18 @@
+# TODO: CHECK THE UV SYNC COMPLAINING ABOUT BM25 EXTRA CORE
 # TODO: IMPLEMENT DOCSTRINGS LATER
 import fire
 import json
 from pathlib import Path
 import bm25s
+from transformers.tokenization_utils_base import BatchEncoding
+from typing import cast
 
-from src.data_models import RagDataset
+from src.answer_generator import load_model, get_chat_template
+from src.data_models import RagDataset, MinimalAnswer
 from src.docs_chunking import Chunk, Chunker
-from src.documents_loading import Document, load_files
-from src.indexer import indexing
-from src.search import load_retriever, search_one, search_batch
+from src.docs_loading import Document, load_files
+from src.docs_indexing import indexing
+from src.search import load_retriever, search_one, search_batch, save_to_json_file
 from src.data_models import (
     MinimalSource,
     AnsweredQuestion,
@@ -54,7 +58,8 @@ class Boss:
         query: str,
         k: int = 1,
         processed_path: str = "data/processed/",
-    ) -> None:
+        question_id: str = "0",
+    ) -> MinimalSearchResults | list[str]:
         """"""
 
         # Check if the index exist to be loaded ALSO pickled chunks
@@ -71,22 +76,33 @@ class Boss:
         chunks: list[Chunk]
         retriever, chunks = load_retriever(processed_path)
         # Retrieve results for one question
-        results: list[Chunk] = search_one(
+        retrieve_results: list[Chunk] = search_one(
             query=query, k=k, retriever=retriever, chunks=chunks
         )
 
+        # Build Miniml search result to be returned and used later in answers
+        min_search_result: MinimalSearchResults = MinimalSearchResults(
+            question_id=question_id,
+            question=query,
+            retrieved_sources=[],  # filled below
+        )
+
+        sources_path_results: list[str] = []
         # Validate each chunk by a MinimalSource model and print the formate required
-        for chunk in results:
+        for chunk in retrieve_results:
             # Validating chunk
-            validated_chunk: MinimalSource = MinimalSource(
+            min_source: MinimalSource = MinimalSource(
                 file_path=chunk.file_path,
                 first_character_index=chunk.start_index,
                 last_character_index=chunk.end_index,
             )
-            print(
-                f"{validated_chunk.file_path} [{validated_chunk.first_character_index}:{validated_chunk.last_character_index}]"
+            sources_path_results.append(
+                f"{min_source.file_path} [{min_source.first_character_index}:{min_source.last_character_index}]"
             )
-            # print(f"{winner.content[winner.start_index : winner.end_index]}")
+            min_search_result.retrieved_sources.append(min_source)
+
+        # return min_search_result
+        return sources_path_results
 
     def search_dataset(
         self,
@@ -94,6 +110,7 @@ class Boss:
         k: int = 1,
         save_directory: str = "data/output/search_results/UnansweredQuestions",
         processed_path: str = "data/processed/",
+        save_file: str = "StudentSearchResults.json",
     ) -> None:
         # TODO: IMPROVE LATER
         """
@@ -145,14 +162,10 @@ class Boss:
             ValidatorModel = AnsweredQuestion
         elif questions_scope == "UnansweredQuestions":
             ValidatorModel = UnansweredQuestion
-        else:
-            # Unreachable case, save to remove
-            print("BOYAAA: SOMETHING HAPPEN FROM NOWHERE, GOOD LUCK FIGURE IT OUT")
-            exit()
 
         # Validate each question AND build a list of questions to be used in retrieving
         batch_questions: list[str] = []
-        validated_batch: list[ValidatorModel] = []
+        validated_batch: list[AnsweredQuestion | UnansweredQuestion] = []
         for q in dataset_data["rag_questions"]:
             validated_batch.append(ValidatorModel.model_validate(q))
             batch_questions.append(q["question"])
@@ -197,12 +210,114 @@ class Boss:
                 )
             boss_search_result.search_results.append(mini_search_result)
 
-        print(boss_search_result)
-        print(type(boss_search_result))
+        # Create paths if not exist and save the json result
+        dir_path: Path = Path(save_directory)
+        dir_path.mkdir(parents=True, exist_ok=True)
+        full_path: Path = dir_path / save_file
+        save_to_json_file(file_path=full_path, obj=boss_search_result)
 
-        # TODO: WRITE THE RESULT OR EMBED IT
+    def answer(
+        self,
+        query: str,
+        k: int = 1,
+        generator_model: str = "Qwen/Qwen3-0.6B",
+        embeddings_model: str = "all-MiniLM-L6-v2",
+        cache_dir: str | None = None,
+        processed_path: str = "data/processed/",
+        question_id: str = "0",
+        save_path: str | None = None,
+    ) -> MinimalAnswer:
+        """Answer a single query using the retrieved context."""
 
-        # TODO: CHECK IF THE PATH IS ALREADY EXIST , IF NO, CREATE IT, KEEP IT DYNAMIC WITH FALLBACK
+        try:
+            # Load retriever and chunks
+            retriever, chunks = load_retriever(processed_path=processed_path)
+
+            # Retrieve the winning chunks to build the response
+            winning_chunks: list[Chunk] = search_one(
+                query=query,
+                k=k,
+                retriever=retriever,
+                chunks=chunks,
+            )
+        except Exception as e:
+            print(e)
+            exit()
+
+        messages: list[dict[str, str]] = get_chat_template(
+            chunks=winning_chunks,
+            query=query,
+        )
+
+        # TODO: MAYBE LATER MAKE IT HANDLE ANOTHER MODELS
+        model, tokenizer = load_model(model_name=generator_model, cache_dir=cache_dir)
+
+        # tokenized_result currently consiste of 'input_ids' and 'attention_mask'
+        # the mask is helpfull later when processing a batch of input since
+        # the tokenized will applay a padding to match the lenght of each prompt
+        # int the batch so attention mask let the model know which token is real vs pad
+
+        # cast to shitthefuck mypy from complaining about the mulit types return
+        tokenized_result: BatchEncoding = cast(
+            typ=BatchEncoding,
+            val=tokenizer.apply_chat_template(
+                conversation=messages,
+                tokenize=True,
+                return_dict=True,
+                add_generation_prompt=True,
+                return_tensors="pt",
+            ),
+        )
+
+        # Generate the model response
+        generated_ids = model.generate(**tokenized_result, max_new_tokens=1024)
+
+        # Strip out the initial prompt from the generated result
+        prompt_len = tokenized_result["input_ids"].shape[-1]
+        output_ids = generated_ids[0][prompt_len:].tolist()
+
+        # Qwen3's </think> token id is 151668, find it from the end
+        # in case the answer content itself contains that literal id somehow
+        try:
+            think_end_idx: int = len(output_ids) - output_ids[::-1].index(151668)
+        except ValueError:
+            think_end_idx = 0  # no thinking block found — whole output is the answer
+
+        # thinking_content = tokenizer.decode(
+        #     output_ids[:think_end_idx],
+        #     skip_special_tokens=True,
+        # ).strip()
+
+        answer_text = tokenizer.decode(
+            output_ids[think_end_idx:],
+            skip_special_tokens=True,
+        ).strip()
+
+        # Build the models for later usage... maybe
+        sources: list[MinimalSource] = [
+            MinimalSource(
+                file_path=chunk.file_path,
+                first_character_index=chunk.start_index,
+                last_character_index=chunk.end_index,
+            )
+            for chunk in winning_chunks
+        ]
+
+        min_answer: MinimalAnswer = MinimalAnswer(
+            question_id=question_id,
+            question=query,
+            retrieved_sources=sources,
+            answer=answer_text,
+        )
+
+        if save_path is not None:
+            save_to_json_file(file_path=save_path, obj=min_answer)
+
+        return min_answer
+
+    def answer_dataset(self) -> None:
+        """"""
+        pass
 
 
 if __name__ == "__main__":
