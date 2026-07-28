@@ -1,24 +1,34 @@
 # TODO: CHECK THE UV SYNC COMPLAINING ABOUT BM25 EXTRA CORE
 # TODO: IMPLEMENT DOCSTRINGS LATER
-import fire
 import json
+import sys
 from pathlib import Path
-import bm25s
-from transformers.tokenization_utils_base import BatchEncoding
-from typing import cast
+from typing import Any, cast
 
-from src.answer_generator import load_model, get_chat_template
-from src.data_models import RagDataset, MinimalAnswer
-from src.docs_chunking import Chunk, Chunker
-from src.docs_loading import Document, load_files
-from src.docs_indexing import indexing
-from src.search import load_retriever, search_one, search_batch, save_to_json_file
+import bm25s
+import fire
+import tqdm
+from transformers.tokenization_utils_base import BatchEncoding
+
+from src.answer_generator import get_chat_template, load_model
 from src.data_models import (
-    MinimalSource,
     AnsweredQuestion,
-    UnansweredQuestion,
+    MinimalAnswer,
     MinimalSearchResults,
+    MinimalSource,
+    RagDataset,
     StudentSearchResults,
+    StudentSearchResultsAndAnswer,
+    UnansweredQuestion,
+)
+from src.docs_chunking import Chunk, Chunker
+from src.docs_indexing import indexing
+from src.docs_loading import Document, load_files
+from src.search import (
+    load_retriever,
+    save_to_json_file,
+    search_batch,
+    search_one,
 )
 
 
@@ -48,10 +58,12 @@ class Boss:
             chunker: Chunker = Chunker(files=docs, max_size=max_chunk_size)
             chunks: list[Chunk] = chunker.process_files()
             # Run the main index processing
-            indexing(chunks=chunks, processed_path=processed_path, method=method)
+            indexing(
+                chunks=chunks, processed_path=processed_path, method=method
+            )
         except Exception as e:
             print(f"{type(e).__name__}: {e}")
-            exit()
+            sys.exit()
 
     def search(
         self,
@@ -69,9 +81,9 @@ class Boss:
                 "Error: no indexed files exist"
                 "Make sure to run indexer first or check the processed path"
             )
-            exit()
+            sys.exit()
 
-        # Load the retrever AND Chunks that was pickled
+        # Load the retriever AND Chunks that was pickled
         retriever: bm25s.BM25
         chunks: list[Chunk]
         retriever, chunks = load_retriever(processed_path)
@@ -80,7 +92,7 @@ class Boss:
             query=query, k=k, retriever=retriever, chunks=chunks
         )
 
-        # Build Miniml search result to be returned and used later in answers
+        # Build Minimal search result to be returned and used later in answers
         min_search_result: MinimalSearchResults = MinimalSearchResults(
             question_id=question_id,
             question=query,
@@ -88,7 +100,8 @@ class Boss:
         )
 
         sources_path_results: list[str] = []
-        # Validate each chunk by a MinimalSource model and print the formate required
+        # Validate each chunk by a MinimalSource model
+        # and print the formate required
         for chunk in retrieve_results:
             # Validating chunk
             min_source: MinimalSource = MinimalSource(
@@ -97,7 +110,9 @@ class Boss:
                 last_character_index=chunk.end_index,
             )
             sources_path_results.append(
-                f"{min_source.file_path} [{min_source.first_character_index}:{min_source.last_character_index}]"
+                f"{min_source.file_path} [{min_source.first_character_index}:{
+                    min_source.last_character_index
+                }]"
             )
             min_search_result.retrieved_sources.append(min_source)
 
@@ -108,7 +123,7 @@ class Boss:
         self,
         dataset_path: str = "data/datasets/AnsweredQuestions/dataset_docs_public.json",
         k: int = 1,
-        save_directory: str = "data/output/search_results/UnansweredQuestions",
+        save_directory: str = "data/output/search_results/AnsweredQuestions",
         processed_path: str = "data/processed/",
         save_file: str = "StudentSearchResults.json",
     ) -> None:
@@ -131,10 +146,10 @@ class Boss:
                 dataset_data = json.load(f)
         except FileNotFoundError:
             print(f"Error: dataset file not found: {dataset_path}")
-            exit()
+            sys.exit(1)
         except Exception as e:
             print(f"Error: {e}")
-            exit()
+            sys.exit(1)
 
         # Check if the index exist to be loaded
         p_path: Path = Path(processed_path)
@@ -143,7 +158,7 @@ class Boss:
                 "Error: no indexed files exist"
                 "Make sure to run indexer first or check the processed path"
             )
-            exit()
+            sys.exit(1)
 
         # Check the scope of the questions to determine the output path
         d_path: Path = Path(dataset_path)
@@ -154,7 +169,7 @@ class Boss:
             questions_scope = "UnansweredQuestions"
         else:
             print(f"Cannot determine dataset scope from path: {dataset_path}")
-            exit()
+            sys.exit(1)
 
         # Get validator model based on the scope
         ValidatorModel: type[AnsweredQuestion | UnansweredQuestion]
@@ -163,7 +178,8 @@ class Boss:
         elif questions_scope == "UnansweredQuestions":
             ValidatorModel = UnansweredQuestion
 
-        # Validate each question AND build a list of questions to be used in retrieving
+        # Validate each question AND build a list of questions
+        # to be used in retrieving
         batch_questions: list[str] = []
         validated_batch: list[AnsweredQuestion | UnansweredQuestion] = []
         for q in dataset_data["rag_questions"]:
@@ -192,7 +208,7 @@ class Boss:
         )
 
         # Iterate over each question
-        for i, question_result in enumerate(batch_results):
+        for i, question_result in tqdm.tqdm(enumerate(batch_results)):
             mini_search_result: MinimalSearchResults = MinimalSearchResults(
                 question_id=validated_batch[i].question_id,
                 question=validated_batch[i].question,
@@ -200,7 +216,7 @@ class Boss:
             )
             # Collect the validated chunks [MinimalSource]
             # Validate the chunks retrieved as result
-            for chunk in question_result:
+            for chunk in tqdm.tqdm(question_result):
                 mini_search_result.retrieved_sources.append(
                     MinimalSource(
                         file_path=chunk.file_path,
@@ -220,44 +236,70 @@ class Boss:
         self,
         query: str,
         k: int = 1,
-        generator_model: str = "Qwen/Qwen3-0.6B",
-        embeddings_model: str = "all-MiniLM-L6-v2",
+        generator_model_name: str = "Qwen/Qwen3-0.6B",
+        embeddings_model_name: str | None = "all-MiniLM-L6-v2",
         cache_dir: str | None = None,
         processed_path: str = "data/processed/",
-        question_id: str = "0",
+        question_id: str | int = "0",
         save_path: str | None = None,
+        # This is just helpful for answer_dataset
+        cached_pack: dict[str, Any] | None = None,
+        winning_chunks: list[Chunk] | None = None,
     ) -> MinimalAnswer:
         """Answer a single query using the retrieved context."""
 
-        try:
-            # Load retriever and chunks
-            retriever, chunks = load_retriever(processed_path=processed_path)
+        # check if its called normally
+        if cached_pack is None:
+            try:
+                # Load retriever and chunks
+                retriever, chunks = load_retriever(
+                    processed_path=processed_path
+                )
 
+                # Retrieve the winning chunks to build the response
+                winning_chunks: list[Chunk] = search_one(
+                    query=query,
+                    k=k,
+                    retriever=retriever,
+                    chunks=chunks,
+                )
+
+                # Load model
+                # TODO: MAYBE LATER MAKE IT HANDLE ANOTHER MODELS
+                model, tokenizer = load_model(
+                    model_name=generator_model_name, cache_dir=cache_dir
+                )
+            except Exception as e:
+                print(e)
+                sys.exit()
+
+        # If the 'answer' method called from 'answer_dataset'
+        # we skip loading the retriever since 'answer_dataset'
+        # already have dataset
+        else:
+            # retriever = cached_pack["retriever"]
+            # chunks = cached_pack["chunks"]
             # Retrieve the winning chunks to build the response
-            winning_chunks: list[Chunk] = search_one(
-                query=query,
-                k=k,
-                retriever=retriever,
-                chunks=chunks,
-            )
-        except Exception as e:
-            print(e)
-            exit()
+            # winning_chunks: list[Chunk] = search_one(
+            #     query=query,
+            #     k=k,
+            #     retriever=retriever,
+            #     chunks=chunks,
+            # )
+            model = cached_pack["model"]
+            tokenizer = cached_pack["tokenizer"]
 
         messages: list[dict[str, str]] = get_chat_template(
             chunks=winning_chunks,
             query=query,
         )
 
-        # TODO: MAYBE LATER MAKE IT HANDLE ANOTHER MODELS
-        model, tokenizer = load_model(model_name=generator_model, cache_dir=cache_dir)
-
-        # tokenized_result currently consiste of 'input_ids' and 'attention_mask'
-        # the mask is helpfull later when processing a batch of input since
-        # the tokenized will applay a padding to match the lenght of each prompt
+        # tokenized_result currently consist of 'input_ids' and 'attention_mask'
+        # the mask is helpful later when processing a batch of input since
+        # the tokenized will apply a padding to match the length of each prompt
         # int the batch so attention mask let the model know which token is real vs pad
 
-        # cast to shitthefuck mypy from complaining about the mulit types return
+        # cast to shut mypy from complaining about the multi types return
         tokenized_result: BatchEncoding = cast(
             typ=BatchEncoding,
             val=tokenizer.apply_chat_template(
@@ -279,9 +321,13 @@ class Boss:
         # Qwen3's </think> token id is 151668, find it from the end
         # in case the answer content itself contains that literal id somehow
         try:
-            think_end_idx: int = len(output_ids) - output_ids[::-1].index(151668)
+            think_end_idx: int = len(output_ids) - output_ids[::-1].index(
+                151668
+            )
         except ValueError:
-            think_end_idx = 0  # no thinking block found — whole output is the answer
+            think_end_idx = (
+                0  # no thinking block found — whole output is the answer
+            )
 
         # thinking_content = tokenizer.decode(
         #     output_ids[:think_end_idx],
@@ -294,6 +340,7 @@ class Boss:
         ).strip()
 
         # Build the models for later usage... maybe
+        assert winning_chunks is not None  # to shut the checker
         sources: list[MinimalSource] = [
             MinimalSource(
                 file_path=chunk.file_path,
@@ -304,7 +351,7 @@ class Boss:
         ]
 
         min_answer: MinimalAnswer = MinimalAnswer(
-            question_id=question_id,
+            question_id=str(question_id),
             question=query,
             retrieved_sources=sources,
             answer=answer_text,
@@ -315,9 +362,66 @@ class Boss:
 
         return min_answer
 
-    def answer_dataset(self) -> None:
+    def answer_dataset(
+        self,
+        student_search_results_path: str,
+        save_directory: str,
+        generator_model_name: str = "Qwen/Qwen3-0.6B",
+        cache_dir: str | None = None,
+        processed_path: str = "data/processed/",
+        # question_id: str = "0",
+        save_path: str | None = None,
+    ) -> StudentSearchResultsAndAnswer:
         """"""
-        pass
+
+        try:
+            # Load search results from dataset search stage
+            with open(student_search_results_path, "r") as f:
+                data: dict = json.load(f)
+        except Exception as e:
+            print(e)
+            sys.exit(1)
+
+        # Load the model
+        model, tokenizer = load_model(
+            model_name=generator_model_name, cache_dir=cache_dir
+        )
+        retriever, chunks = load_retriever(processed_path=processed_path)
+
+        # Build the full obj
+        final_boss = StudentSearchResultsAndAnswer(
+            search_results=[],
+            k=data["k"],
+        )
+
+        # Build a pack to be passed so the answer not try
+        # to load retrieval and model each time
+        cached_pack = {
+            "model": model,
+            "tokenizer": tokenizer,
+        }
+
+        for result in tqdm.tqdm(data["search_results"]):
+            winning_chunks = search_one(
+                query=result["question"],
+                k=data["k"],
+                retriever=retriever,
+                chunks=chunks,
+            )
+
+            answer_obj: MinimalAnswer = self.answer(
+                query=result["question"],
+                k=data["k"],
+                question_id=result["question_id"],
+                cached_pack=cached_pack,
+                winning_chunks=winning_chunks,
+            )
+
+            print(answer_obj)
+            final_boss.search_results.append(answer_obj)
+
+        print("all done")
+        return final_boss
 
 
 if __name__ == "__main__":
