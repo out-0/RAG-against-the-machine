@@ -1,4 +1,7 @@
-from src.data_models import MinimalSearchResults
+import os
+from typing import Any
+
+import torch
 from numpy import dtype
 from transformers import (
     AutoModelForCausalLM,
@@ -6,17 +9,16 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizerBase,
 )
-from typing import Any
+
+from src.data_models import MinimalSearchResults
 from src.docs_chunking import Chunk
-import os
-import torch
 
 
 def load_model(model_name: str, cache_dir: str | None) -> tuple[Any, Any]:
     """"""
 
     # Override default huggingface cache_dir if provided
-    handle_cache_path(cache_dir=cache_dir)
+    handle_cache_dir(cache_dir=cache_dir)
 
     # Load the model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(
@@ -24,7 +26,9 @@ def load_model(model_name: str, cache_dir: str | None) -> tuple[Any, Any]:
         dtype="auto",  # TODO: CHECK THIS LATER
         device_map="auto",
     )
-    tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_name)
+    tokenizer = AutoTokenizer.from_pretrained(
+        pretrained_model_name_or_path=model_name
+    )
 
     return (model, tokenizer)
 
