@@ -36,7 +36,6 @@ def load_files(input_path: str) -> list[Document]:
     # Targeted files
     extensions: list[str] = [".py", ".md"]
     docs_list: list[Document] = []
-    file_content: str = ""
 
     if path.is_file():
         if path.suffix in extensions:

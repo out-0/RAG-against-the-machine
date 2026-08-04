@@ -18,10 +18,12 @@ But for an embedding its relay on a vectors which kida based on
 the attensions between the terms or phrases
 """
 
-from src.docs_chunking import Chunk
-import bm25s
-from pathlib import Path
 import pickle
+from pathlib import Path
+
+import bm25s
+
+from src.data_models import Chunk
 
 
 def indexing(
@@ -48,11 +50,13 @@ def indexing(
         # may cost a small amount of recall
         # stemmer = Stemmer.stemmer("english")
 
-        corpus_tokens: list[list[str]] | bm25s.tokenization.Tokenized = bm25s.tokenize(
-            texts=docs, show_progress=True
+        corpus_tokens: list[list[str]] | bm25s.tokenization.Tokenized = (
+            bm25s.tokenize(texts=docs, show_progress=True)
         )
 
-        retriever: bm25s.BM25 = bm25s.BM25()
+        # b: for lenght penalties(long files got penalities)
+        # k1: word repatation boosting
+        retriever: bm25s.BM25 = bm25s.BM25(k1=1.5, b=0.5)
         retriever.index(corpus=corpus_tokens, show_progress=True)
         retriever.save(processed_path)
 
@@ -64,7 +68,10 @@ def indexing(
     elif method == "embedding":  # TODO: CHECK AND IMPLEMENT FOR EMBEDDING LATER
         pass
 
-    print(f"Ingestion complete! Indexed {len(chunks)} chunks under {processed_path}")
+    print(
+        f"Ingestion complete! "
+        f"Indexed {len(chunks)} chunks under {processed_path}"
+    )
 
 
 # class Tf_idf_search:

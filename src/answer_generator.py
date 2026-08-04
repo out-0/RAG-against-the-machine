@@ -1,17 +1,12 @@
 import os
 from typing import Any
 
-import torch
-from numpy import dtype
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    PreTrainedModel,
-    PreTrainedTokenizerBase,
 )
 
-from src.data_models import MinimalSearchResults
-from src.docs_chunking import Chunk
+from src.data_models import Chunk
 
 
 def load_model(model_name: str, cache_dir: str | None) -> tuple[Any, Any]:
@@ -47,7 +42,7 @@ def handle_cache_dir(cache_dir: str | None) -> None:
 
 
 def get_chat_template(
-    chunks: list[Chunk],
+    chunks: list[Chunk] | None,
     query: str,
 ) -> list[dict[str, str]]:
     """
@@ -60,6 +55,9 @@ def get_chat_template(
     Returns:
 
     """
+
+    if not chunks:
+        raise TypeError("Error: Require non-empty chunks")
 
     context: str = "\n\n".join(chunk.content for chunk in chunks)
 

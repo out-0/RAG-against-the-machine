@@ -1,6 +1,8 @@
-from pydantic import BaseModel
-from pydantic import Field
 import uuid
+from typing import Any
+
+from pydantic import BaseModel, Field
+from pydantic.dataclasses import dataclass
 
 
 class MinimalSource(BaseModel):
@@ -33,6 +35,8 @@ class RagDataset(BaseModel):
 class MinimalSearchResults(BaseModel):
     question_id: str
     question: str
+    # Add just casue moulinette required that field name
+    question_str: str
     retrieved_sources: list[MinimalSource]
 
 
@@ -48,3 +52,19 @@ class StudentSearchResults(BaseModel):
 class StudentSearchResultsAndAnswer(BaseModel):
     search_results: list[MinimalAnswer]
     k: int
+
+
+# Using pydantic dataclass to add a layer of validation
+@dataclass
+class Chunk:
+    id: int
+    content: str
+    start_index: int
+    end_index: int
+    file_path: str
+
+
+@dataclass
+class CachedResources:
+    model: Any
+    tokenizer: Any

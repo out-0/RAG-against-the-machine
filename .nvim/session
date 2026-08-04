@@ -2,14 +2,6 @@ let SessionLoad = 1
 let s:so_save = &g:so | let s:siso_save = &g:siso | setg so=0 siso=0 | setl so=-1 siso=-1
 let v:this_session=expand("<sfile>:p")
 doautoall SessionLoadPre
-let Lf_StlColorscheme = "everforest"
-let VM_Insert_hl = "Cursor"
-let Lf_PopupColorscheme = "everforest"
-let VM_Mono_hl = "Cursor"
-let NetrwTopLvlMenu = "Netrw."
-let VM_Extend_hl = "Visual"
-let NetrwMenuPriority =  80 
-let VM_Cursor_hl = "Cursor"
 silent only
 silent tabonly
 cd ~/work/RAG-against-the-machine
@@ -18,45 +10,35 @@ if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
 endif
 let s:shortmess_save = &shortmess
 set shortmess+=aoO
-badd +142 src/__main__.py
-badd +1 ~/work/RAG-against-the-machine
-badd +6 src/indexer.py
-badd +21 src/search.py
-badd +35 src/docs_chunking.py
-badd +3 src/data_models.py
-badd +5 data/datasets/AnsweredQuestions/dataset_code_public.json
-badd +1394 data/datasets/AnsweredQuestions/dataset_docs_public.json
-badd +6 src/documents_loading.py
-badd +1 src/models.py
-badd +10 /usr/lib/python3.14/uuid.py
+badd +565 src/__main__.py
+badd +97 src/docs_indexing.py
+badd +23 src/docs_chunking.py
+badd +35 src/data_models.py
+badd +6 data/datasets/UnansweredQuestions/dataset_docs_public.json
+badd +10 pyproject.toml
+badd +580 .venv/lib/python3.14/site-packages/bm25s/tokenization.py
+badd +12 README.md
+badd +24 makefile
 argglobal
 %argdel
-$argadd ~/work/RAG-against-the-machine
 edit src/__main__.py
 argglobal
-setlocal foldmethod=expr
-setlocal foldexpr=v:lua.vim.lsp.foldexpr()
+balt makefile
+setlocal foldmethod=manual
+setlocal foldexpr=0
 setlocal foldmarker={{{,}}}
 setlocal foldignore=#
-setlocal foldlevel=99
+setlocal foldlevel=0
 setlocal foldminlines=1
 setlocal foldnestmax=20
 setlocal foldenable
-14
-sil! normal! zo
-81
-sil! normal! zo
-87
-sil! normal! zo
-135
-sil! normal! zo
-139
-sil! normal! zo
-let s:l = 142 - ((15 * winheight(0) + 13) / 26)
+silent! normal! zE
+let &fdl = &fdl
+let s:l = 565 - ((8 * winheight(0) + 13) / 26)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 142
+keepjumps 565
 normal! 02|
 tabnext 1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
@@ -71,7 +53,6 @@ if filereadable(s:sx)
 endif
 let &g:so = s:so_save | let &g:siso = s:siso_save
 set hlsearch
-nohlsearch
 doautoall SessionLoadPost
 unlet SessionLoad
 " vim: set ft=vim :

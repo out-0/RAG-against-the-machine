@@ -1,9 +1,8 @@
-# TODO: CHECK THE UV SYNC COMPLAINING ABOUT BM25 EXTRA CORE
 # TODO: IMPLEMENT DOCSTRINGS LATER
 import json
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import bm25s
 import fire
@@ -13,6 +12,8 @@ from transformers.tokenization_utils_base import BatchEncoding
 from src.answer_generator import get_chat_template, load_model
 from src.data_models import (
     AnsweredQuestion,
+    CachedResources,
+    Chunk,
     MinimalAnswer,
     MinimalSearchResults,
     MinimalSource,
@@ -21,9 +22,10 @@ from src.data_models import (
     StudentSearchResultsAndAnswer,
     UnansweredQuestion,
 )
-from src.docs_chunking import Chunk, Chunker
+from src.docs_chunking import Chunker
 from src.docs_indexing import indexing
 from src.docs_loading import Document, load_files
+from src.recall import rag_recall_at_k
 from src.search import (
     load_retriever,
     save_to_json_file,
@@ -32,12 +34,22 @@ from src.search import (
 )
 
 
+def print_red(string):
+    """
+    print string in ANSI excape code for colored (red) visual
+    """
+    print(f"\033[91m {string}\033[00m")
+
+
+def print_green(string):
+    """
+    print string in ANSI excape code for colored (green) visual
+    """
+    print(f"\033[92m {string}\033[00m")
+
+
 class Boss:
     """"""
-
-    def __init__(self) -> None:
-        """"""
-        pass
 
     def index(
         self,
@@ -45,10 +57,20 @@ class Boss:
         raw_path: str = "data/raw/vllm-0.10.1",
         processed_path: str = "data/processed/",
         method: str = "bm25",
+        embeddings_model_name: str | None = "all-MiniLM-L6-v2",
+        use_embeddings: bool = False,
     ) -> None:
         """A quick method which fired by the CMD line argument,
         Its manage the indexing stage
         """
+        print_green("""
+    ██╗███╗   ██╗██████╗ ███████╗██╗  ██╗
+    ██║████╗  ██║██╔══██╗██╔════╝╚██╗██╔╝
+    ██║██╔██╗ ██║██║  ██║█████╗   ╚███╔╝
+    ██║██║╚██╗██║██║  ██║██╔══╝   ██╔██╗
+    ██║██║ ╚████║██████╔╝███████╗██╔╝ ██╗
+    ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝
+        """)
 
         try:
             # Load the files into program
@@ -74,6 +96,15 @@ class Boss:
     ) -> MinimalSearchResults | list[str]:
         """"""
 
+        print_green("""
+    ███████╗███████╗ █████╗ ██████╗  ██████╗██╗  ██╗
+    ██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝██║  ██║
+    ███████╗█████╗  ███████║██████╔╝██║     ███████║
+    ╚════██║██╔══╝  ██╔══██║██╔══██╗██║     ██╔══██║
+    ███████║███████╗██║  ██║██║  ██║╚██████╗██║  ██║
+    ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+        """)
+
         # Check if the index exist to be loaded ALSO pickled chunks
         path: Path = Path(processed_path)
         if not path.is_dir():
@@ -96,6 +127,7 @@ class Boss:
         min_search_result: MinimalSearchResults = MinimalSearchResults(
             question_id=question_id,
             question=query,
+            question_str=query,
             retrieved_sources=[],  # filled below
         )
 
@@ -121,34 +153,53 @@ class Boss:
 
     def search_dataset(
         self,
-        dataset_path: str = "data/datasets/AnsweredQuestions/dataset_docs_public.json",
+        dataset_path: str | None = None,
         k: int = 1,
-        save_directory: str = "data/output/search_results/AnsweredQuestions",
+        save_directory: str | None = None,
         processed_path: str = "data/processed/",
-        save_file: str = "StudentSearchResults.json",
+        save_file: str | None = None,
     ) -> None:
         # TODO: IMPROVE LATER
         """
-        Reach a batch of questions from the provided dataset path and operate search
-        over all of them after validating the loaded questions,
+        Reach a batch of questions from the provided dataset path and operate
+        search over all of them after validating the loaded questions,
 
         Args:
 
         Returns:
-
-
         """
 
-        # Check if dataset exist and can be opened
+        print_green("""
+    ███████╗███████╗ █████╗ ██████╗  ██████╗██╗  ██╗
+    ██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝██║  ██║
+    ███████╗█████╗  ███████║██████╔╝██║     ███████║
+    ╚════██║██╔══╝  ██╔══██║██╔══██╗██║     ██╔══██║
+    ███████║███████╗██║  ██║██║  ██║╚██████╗██║  ██║
+    ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+        """)
+
+        # Some checks for values, even if fire interface can do the job
         try:
+            if dataset_path is None:
+                raise TypeError(
+                    "Error: Dataset path is required with flag --dataset_path"
+                )
+            if save_directory is None:
+                raise TypeError(
+                    "Error: "
+                    "save directory is required with flag --save_directory"
+                )
             # Read the json dataset
             with open(dataset_path, "r") as f:
                 dataset_data = json.load(f)
         except FileNotFoundError:
             print(f"Error: dataset file not found: {dataset_path}")
             sys.exit(1)
+        except TypeError as e:
+            print(e)
+            sys.exit(1)
         except Exception as e:
-            print(f"Error: {e}")
+            print(e)
             sys.exit(1)
 
         # Check if the index exist to be loaded
@@ -186,17 +237,21 @@ class Boss:
             validated_batch.append(ValidatorModel.model_validate(q))
             batch_questions.append(q["question"])
 
-        # Now Validate the full questions batch (Rag dataset)
-        _: RagDataset = RagDataset(rag_questions=validated_batch)
+        try:
+            # Now Validate the full questions batch (Rag dataset)
+            _: RagDataset = RagDataset(rag_questions=validated_batch)
 
-        # Load the indexed files
-        retriever, chunks = load_retriever(processed_path)
-        batch_results: list[list[Chunk]] = search_batch(
-            queries=batch_questions,
-            k=k,
-            retriever=retriever,
-            chunks=chunks,
-        )
+            # Load the indexed files
+            retriever, chunks = load_retriever(processed_path)
+            batch_results: list[list[Chunk]] = search_batch(
+                queries=batch_questions,
+                k=k,
+                retriever=retriever,
+                chunks=chunks,
+            )
+        except Exception as e:
+            print_red(e)
+            sys.exit(1)
 
         # THE TARGET IS TO BUILD StudentSearchResults obj, to do that:
         # Validate the search result chunks by [MinimalSource] AND
@@ -208,15 +263,18 @@ class Boss:
         )
 
         # Iterate over each question
-        for i, question_result in tqdm.tqdm(enumerate(batch_results)):
+        for i, question_result in enumerate(batch_results):
             mini_search_result: MinimalSearchResults = MinimalSearchResults(
                 question_id=validated_batch[i].question_id,
                 question=validated_batch[i].question,
+                # Add just casue moulinette required that field name
+                # But provided model use first one
+                question_str=validated_batch[i].question,
                 retrieved_sources=[],
             )
             # Collect the validated chunks [MinimalSource]
             # Validate the chunks retrieved as result
-            for chunk in tqdm.tqdm(question_result):
+            for chunk in question_result:
                 mini_search_result.retrieved_sources.append(
                     MinimalSource(
                         file_path=chunk.file_path,
@@ -229,27 +287,28 @@ class Boss:
         # Create paths if not exist and save the json result
         dir_path: Path = Path(save_directory)
         dir_path.mkdir(parents=True, exist_ok=True)
-        full_path: Path = dir_path / save_file
+        save_file_name = save_file if save_file else d_path.name
+        full_path: Path = dir_path / save_file_name
         save_to_json_file(file_path=full_path, obj=boss_search_result)
+        print_green(f"Saved student_search_results to {full_path}")
 
     def answer(
         self,
         query: str,
         k: int = 1,
         generator_model_name: str = "Qwen/Qwen3-0.6B",
-        embeddings_model_name: str | None = "all-MiniLM-L6-v2",
         cache_dir: str | None = None,
         processed_path: str = "data/processed/",
         question_id: str | int = "0",
         save_path: str | None = None,
         # This is just helpful for answer_dataset
-        cached_pack: dict[str, Any] | None = None,
+        cached_resources: CachedResources | None = None,
         winning_chunks: list[Chunk] | None = None,
     ) -> MinimalAnswer:
         """Answer a single query using the retrieved context."""
 
         # check if its called normally
-        if cached_pack is None:
+        if cached_resources is None:
             try:
                 # Load retriever and chunks
                 retriever, chunks = load_retriever(
@@ -277,39 +336,34 @@ class Boss:
         # we skip loading the retriever since 'answer_dataset'
         # already have dataset
         else:
-            # retriever = cached_pack["retriever"]
-            # chunks = cached_pack["chunks"]
-            # Retrieve the winning chunks to build the response
-            # winning_chunks: list[Chunk] = search_one(
-            #     query=query,
-            #     k=k,
-            #     retriever=retriever,
-            #     chunks=chunks,
-            # )
-            model = cached_pack["model"]
-            tokenizer = cached_pack["tokenizer"]
+            model = cached_resources.model
+            tokenizer = cached_resources.tokenizer
 
-        messages: list[dict[str, str]] = get_chat_template(
-            chunks=winning_chunks,
-            query=query,
-        )
+        try:
+            messages: list[dict[str, str]] = get_chat_template(
+                chunks=winning_chunks,
+                query=query,
+            )
 
-        # tokenized_result currently consist of 'input_ids' and 'attention_mask'
-        # the mask is helpful later when processing a batch of input since
-        # the tokenized will apply a padding to match the length of each prompt
-        # int the batch so attention mask let the model know which token is real vs pad
+            # tokenized_result currently consist of 'input_ids' and 'attention_mask'
+            # the mask is helpful later when processing a batch of input since
+            # the tokenized will apply a padding to match the length of each prompt
+            # int the batch so attention mask let the model know which token is real vs pad
 
-        # cast to shut mypy from complaining about the multi types return
-        tokenized_result: BatchEncoding = cast(
-            typ=BatchEncoding,
-            val=tokenizer.apply_chat_template(
-                conversation=messages,
-                tokenize=True,
-                return_dict=True,
-                add_generation_prompt=True,
-                return_tensors="pt",
-            ),
-        )
+            # cast to shut mypy from complaining about the multi types return
+            tokenized_result: BatchEncoding = cast(
+                typ=BatchEncoding,
+                val=tokenizer.apply_chat_template(
+                    conversation=messages,
+                    tokenize=True,
+                    return_dict=True,
+                    add_generation_prompt=True,
+                    return_tensors="pt",
+                ),
+            )
+        except Exception as e:
+            print(e)
+            sys.exit(1)
 
         # Generate the model response
         generated_ids = model.generate(**tokenized_result, max_new_tokens=1024)
@@ -325,9 +379,8 @@ class Boss:
                 151668
             )
         except ValueError:
-            think_end_idx = (
-                0  # no thinking block found — whole output is the answer
-            )
+            # no thinking block found — whole output is the answer
+            think_end_idx = 0
 
         # thinking_content = tokenizer.decode(
         #     output_ids[:think_end_idx],
@@ -353,6 +406,7 @@ class Boss:
         min_answer: MinimalAnswer = MinimalAnswer(
             question_id=str(question_id),
             question=query,
+            question_str=query,
             retrieved_sources=sources,
             answer=answer_text,
         )
@@ -378,6 +432,8 @@ class Boss:
             # Load search results from dataset search stage
             with open(student_search_results_path, "r") as f:
                 data: dict = json.load(f)
+
+            print(f"Loaded {data['search_results']} questions")
         except Exception as e:
             print(e)
             sys.exit(1)
@@ -396,10 +452,9 @@ class Boss:
 
         # Build a pack to be passed so the answer not try
         # to load retrieval and model each time
-        cached_pack = {
-            "model": model,
-            "tokenizer": tokenizer,
-        }
+        cached_resources: CachedResources = CachedResources(
+            model=model, tokenizer=tokenizer
+        )
 
         for result in tqdm.tqdm(data["search_results"]):
             winning_chunks = search_one(
@@ -413,15 +468,113 @@ class Boss:
                 query=result["question"],
                 k=data["k"],
                 question_id=result["question_id"],
-                cached_pack=cached_pack,
+                cached_resources=cached_resources,
                 winning_chunks=winning_chunks,
             )
 
-            print(answer_obj)
             final_boss.search_results.append(answer_obj)
 
         print("all done")
         return final_boss
+
+    def evaluate(
+        self,
+        student_search_results_path: str,
+        dataset_path: str,
+        k: int,
+    ) -> None:
+        """
+        This is query level formula:
+        Recall@k = (Number of queries with target in top-k) / (Total queries)
+        """
+
+        self._print_green(r"""
+    ██████╗ ███████╗ ██████╗ █████╗ ██╗     ██╗
+    ██╔══██╗██╔════╝██╔════╝██╔══██╗██║     ██║
+    ██████╔╝█████╗  ██║     ███████║██║     ██║
+    ██╔══██╗██╔══╝  ██║     ██╔══██║██║     ██║
+    ██║  ██║███████╗╚██████╗██║  ██║███████╗███████╗
+    ╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝
+    """)
+
+        # Some checks
+        try:
+            k = int(k)
+            if k <= 0:
+                raise ValueError
+            print("Loading student results...")
+            with open(student_search_results_path, "r") as f:
+                student_results = json.load(f)
+            print("Student data is Valid: True")
+            print("Loading Dataset...")
+            with open(dataset_path, "r") as df:
+                dataset_data = json.load(df)
+            print("Dataset loaded")
+
+        except json.decoder.JSONDecodeError as e:
+            print("Error: Malformed Json file:")
+            print(e)
+            sys.exit(1)
+        except ValueError as e:
+            print("Error: Stop bullshiting and use correct non negative value")
+            print(e)
+            sys.exit(1)
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(e)
+            sys.exit(1)
+
+        try:
+            # Extract the list of student results
+            questions_results: list = student_results["search_results"]
+            # Extract the truth sources for each question
+            questions_truth: list = dataset_data["rag_questions"]
+
+            if len(questions_results) != len(questions_truth):
+                print(
+                    "Warrning: Expecting a match between questions "
+                    "count withing two data provided"
+                )
+                return
+        except KeyError as e:
+            print(e)
+            sys.exit(1)
+
+        all_recall_scores: list[float] = []
+
+        for i in tqdm.tqdm(range(len(questions_results))):
+            # Extract the correct sources that we evaluate again
+            question_truth_sources: list[dict[str, str | int]] = (
+                questions_truth[i]["sources"]
+            )
+
+            # Now extract the student retrived sources for current question
+            student_magic_result: list[dict[str, str | int]] = (
+                questions_results[i]["retrieved_sources"]
+            )
+
+            single_recall_result: float = rag_recall_at_k(
+                retrieved_results=student_magic_result,
+                ground_truths=question_truth_sources,
+                k=k,
+                iou_threshold=0.05,
+            )
+
+            all_recall_scores.append(single_recall_result)
+
+        print(f"Total number of questions: {len(questions_truth)}")
+        print(
+            "Total number of questions "
+            f"with student sources: {len(questions_results)}"
+        )
+
+        print("Evaluation Results...")
+        print(f"questions evaluated: {len(questions_results)}")
+
+        final_result: float = sum(all_recall_scores) / len(all_recall_scores)
+        print(f"Recall@{k}: {final_result:.3f} ({final_result * 100:.2f}%)")
 
 
 if __name__ == "__main__":
