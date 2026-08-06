@@ -22,7 +22,11 @@ Build a Retrieval-Augmented Generation system that answers questions about codeb
 
 - [Embeddings/Word embeddings](https://www.tensorflow.org/text/tutorials/word_embeddings)
 - [Embeddings/Word embeddings](https://www.youtube.com/watch?v=hVM8qGRTaOA)
+- [Hidden golden embeddings](https://huggingface.co/spaces/hesamation/primer-llm-embedding?section=what_are_embeddings?)
 - [Semantic Search](https://www.sbert.net/examples/sentence_transformer/applications/semantic-search/README.html#symmetric-vs-asymmetric-semantic-search)
+- [vector embeddings](https://www.geeksforgeeks.org/nlp/what-are-vector-embeddings/)
+- [Include vector database](https://www.geeksforgeeks.org/data-science/implementing-semantic-search-with-vector-database/)
+- [FAISS (Facebook AI Semantic Search)](https://github.com/facebookresearch/faiss/wiki/getting-started?)
 
 **Model Overview**
 _Qwen3-0.6B has the following features:_

@@ -1,4 +1,5 @@
 import pickle
+import sys
 from pathlib import Path
 
 import bm25s
@@ -76,3 +77,4 @@ def save_to_json_file(
     except (Exception, PydanticSerializationError) as e:
         print(f"Error: Saving result - {e} ⚠️")
         sys.exit(1)
+
