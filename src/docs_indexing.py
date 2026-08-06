@@ -1,8 +1,8 @@
-"""Index class wrapper for handling choosed chunking method,
+"""Index class wrapper for handling chosen chunking method,
 
 indexing is basically create a special map that link each
 word to the relevant docs for it after scoring it by a
-some formules based on the indexing method,
+some formula's based on the indexing method,
 
 To simple it, Index the docs internally build a map 'the inverted index'
 which map a word to list of matching documents and the frequency
@@ -14,22 +14,28 @@ of that word withing that document, something like:
 
 Its more than that but,
 also that is just implied for a lexical indexing like TF-IDF, BM25,
-But for an embedding its relay on a vectors which kida based on
-the attensions between the terms or phrases
+But for an embedding its relay on a vectors which kinda based on
+the attentions between the terms or phrases
 """
 
 import pickle
 from pathlib import Path
 
 import bm25s
-
+import torch
+from sentence_transformers import SentenceTransformer
+from sentence_transformers.util import semantic_search
+from src.custom_print import print_green, print_yellow
 from src.data_models import Chunk
+from src.vector_idx import v_idx_build_and_save
 
 
 def indexing(
     chunks: list[Chunk] | None = None,
     processed_path: str = "data/processed",
-    method: str = "bm25",
+    # method: str = "bm25",
+    use_embedding: bool = False,
+    embeddings_model_name: str | None = "all-MiniLM-L6-v2",
 ) -> None:
     """Run the indexer based on the indexing method specified by args
     if not specified, the default is bm25 which is implemented by
@@ -37,7 +43,7 @@ def indexing(
     """
 
     if not chunks:
-        raise TypeError("Warrning: Chunks to index is missed")
+        raise TypeError("Warning: Chunks to index is missed")
 
     # Create the path for the indexed lookup
     Path(processed_path).mkdir(parents=True, exist_ok=True)
@@ -45,7 +51,7 @@ def indexing(
     # Extract content from chunks instead of full obj
     docs: list[str] = [chunk.content for chunk in chunks]
 
-    if method == "bm25":
+    if not use_embedding:
         # skipped stemming to avoid mangling code identifiers;
         # may cost a small amount of recall
         # stemmer = Stemmer.stemmer("english")
@@ -54,24 +60,42 @@ def indexing(
             bm25s.tokenize(texts=docs, show_progress=True)
         )
 
-        # b: for lenght penalties(long files got penalities)
-        # k1: word repatation boosting
+        # b: for length penalties(long files got penalities)
+        # k1: word repetition boosting
         retriever: bm25s.BM25 = bm25s.BM25(k1=1.5, b=0.5)
         retriever.index(corpus=corpus_tokens, show_progress=True)
         retriever.save(processed_path)
 
-        # Save chunks as pickle file (binary format) so can
-        # be loaded also later to map result to chunk obj
-        with open(Path(processed_path) / "chunks.pkl", "wb") as f:
-            pickle.dump(chunks, f)
+        print_green(
+            f"Ingestion complete! "
+            f"Indexed {len(chunks)} chunks under {processed_path}"
+        )
 
-    elif method == "embedding":  # TODO: CHECK AND IMPLEMENT FOR EMBEDDING LATER
-        pass
+    elif use_embedding and embeddings_model_name:
+        if embeddings_model_name != "all-MiniLM-L6-v2":
+            print_yellow("WARNING: Currently only 'all-MiniLM-L6-v2' is supported for embedding")
+            print_yellow("Fallback to default 'all-MiniLM-L6-v2'")
+            embeddings_model_name = "all-MiniLM-L6-v2"
 
-    print(
-        f"Ingestion complete! "
-        f"Indexed {len(chunks)} chunks under {processed_path}"
-    )
+        # Build and save the FAISS index for semantic search
+        v_idx_build_and_save(
+            model_name=embeddings_model_name,
+            index_save_dir=processed_path,
+            chunks=chunks,
+        )
+
+        print("cool")
+        exit(0)
+
+        # Load model
+        # index and store the vectors of docs
+
+
+    # Save chunks as pickle file (binary format) so can
+    # be loaded also later to map result to chunk obj
+    with open(Path(processed_path) / "chunks.pkl", "wb") as f:
+        pickle.dump(chunks, f)
+        print("Chunks saved as pickle file for later mapping to results")
 
 
 # class Tf_idf_search:
@@ -83,7 +107,7 @@ def indexing(
 #
 #     Formula is:
 #         TF(t,d) =   number of times term appears in document /
-#                     total numer of words in document
+#                     total number of words in document
 #
 #         IDF(t,D) = log(Total documents count / Documents have the term)
 #

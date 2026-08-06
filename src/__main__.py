@@ -32,33 +32,29 @@ from src.search import (
     search_batch,
     search_one,
 )
-
-
-def print_red(string):
-    """
-    print string in ANSI excape code for colored (red) visual
-    """
-    print(f"\033[91m {string}\033[00m")
-
-
-def print_green(string):
-    """
-    print string in ANSI excape code for colored (green) visual
-    """
-    print(f"\033[92m {string}\033[00m")
+from src.custom_print import print_green, print_red
 
 
 class Boss:
-    """"""
+    """_summary_
+
+    Raises:
+        TypeError: _description_
+        TypeError: _description_
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
+    """
 
     def index(
         self,
         max_chunk_size: int = 2000,
         raw_path: str = "data/raw/vllm-0.10.1",
         processed_path: str = "data/processed/",
-        method: str = "bm25",
+        # method: str = "bm25", # TODO: MAYBE ADD ANOTHER METHODS LATER
         embeddings_model_name: str | None = "all-MiniLM-L6-v2",
-        use_embeddings: bool = False,
+        use_embedding: bool = False,
     ) -> None:
         """A quick method which fired by the CMD line argument,
         Its manage the indexing stage
@@ -81,7 +77,11 @@ class Boss:
             chunks: list[Chunk] = chunker.process_files()
             # Run the main index processing
             indexing(
-                chunks=chunks, processed_path=processed_path, method=method
+                chunks=chunks,
+                processed_path=processed_path,
+                # method=method,
+                use_embedding=use_embedding,
+                embeddings_model_name=embeddings_model_name,
             )
         except Exception as e:
             print(f"{type(e).__name__}: {e}")
@@ -267,7 +267,7 @@ class Boss:
             mini_search_result: MinimalSearchResults = MinimalSearchResults(
                 question_id=validated_batch[i].question_id,
                 question=validated_batch[i].question,
-                # Add just casue moulinette required that field name
+                # Add just cause moulinette required that field name
                 # But provided model use first one
                 question_str=validated_batch[i].question,
                 retrieved_sources=[],
@@ -316,7 +316,7 @@ class Boss:
                 )
 
                 # Retrieve the winning chunks to build the response
-                winning_chunks: list[Chunk] = search_one(
+                winning_chunks = search_one(
                     query=query,
                     k=k,
                     retriever=retriever,
@@ -488,7 +488,7 @@ class Boss:
         Recall@k = (Number of queries with target in top-k) / (Total queries)
         """
 
-        self._print_green(r"""
+        print_green(r"""
     ██████╗ ███████╗ ██████╗ █████╗ ██╗     ██╗
     ██╔══██╗██╔════╝██╔════╝██╔══██╗██║     ██║
     ██████╔╝█████╗  ██║     ███████║██║     ██║
@@ -534,7 +534,7 @@ class Boss:
 
             if len(questions_results) != len(questions_truth):
                 print(
-                    "Warrning: Expecting a match between questions "
+                    "Warning: Expecting a match between questions "
                     "count withing two data provided"
                 )
                 return
@@ -550,11 +550,12 @@ class Boss:
                 questions_truth[i]["sources"]
             )
 
-            # Now extract the student retrived sources for current question
+            # Now extract the student retrieved sources for current question
             student_magic_result: list[dict[str, str | int]] = (
                 questions_results[i]["retrieved_sources"]
             )
 
+            # Get recall score for current question
             single_recall_result: float = rag_recall_at_k(
                 retrieved_results=student_magic_result,
                 ground_truths=question_truth_sources,

@@ -8,7 +8,7 @@ index:
 	uv run python3 -m src index
 
 search:
-	uv run python3 -m src 
+	uv run python3 -m src
 
 lint:
 	flake8 .
@@ -24,5 +24,6 @@ clean:
 	@rm -rf .mypy_cache
 	@rm -rf .ruff_cache
 	@rm -rf __pycache__
+	@rm -rf src/__pycache__
 	@rm -rf .nvim
 
