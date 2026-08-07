@@ -20,12 +20,12 @@ the attentions between the terms or phrases
 
 import pickle
 from pathlib import Path
-
+import threading
 import bm25s
 import torch
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import semantic_search
-from src.custom_print import print_green, print_yellow
+from src.custom_print import print_green, print_yellow, print_red
 from src.data_models import Chunk
 from src.vector_idx import v_idx_build_and_save
 
@@ -36,10 +36,13 @@ def indexing(
     # method: str = "bm25",
     use_embedding: bool = False,
     embeddings_model_name: str | None = "all-MiniLM-L6-v2",
+    use_hybrid: bool = False,
 ) -> None:
     """Run the indexer based on the indexing method specified by args
     if not specified, the default is bm25 which is implemented by
     bm25s library
+
+    if hypbrid we just run both (keyword | embeddings) indexing
     """
 
     if not chunks:
@@ -51,11 +54,10 @@ def indexing(
     # Extract content from chunks instead of full obj
     docs: list[str] = [chunk.content for chunk in chunks]
 
-    if not use_embedding:
-        # skipped stemming to avoid mangling code identifiers;
-        # may cost a small amount of recall
-        # stemmer = Stemmer.stemmer("english")
+    # Splite keyword indexing and embeddings to use them as threads
 
+    def keyword_indexing(docs: list[str]) -> None:
+        """"""
         corpus_tokens: list[list[str]] | bm25s.tokenization.Tokenized = (
             bm25s.tokenize(texts=docs, show_progress=True)
         )
@@ -71,9 +73,16 @@ def indexing(
             f"Indexed {len(chunks)} chunks under {processed_path}"
         )
 
-    elif use_embedding and embeddings_model_name:
+    def semantic_indexing(
+        embeddings_model_name: str,
+        processed_path: str,
+        docs: list[str],
+    ) -> None:
+        """"""
         if embeddings_model_name != "all-MiniLM-L6-v2":
-            print_yellow("WARNING: Currently only 'all-MiniLM-L6-v2' is supported for embedding")
+            print_yellow(
+                "WARNING: Currently only 'all-MiniLM-L6-v2' is supported for embedding"
+            )
             print_yellow("Fallback to default 'all-MiniLM-L6-v2'")
             embeddings_model_name = "all-MiniLM-L6-v2"
 
@@ -84,12 +93,34 @@ def indexing(
             chunks=chunks,
         )
 
-        print("cool")
-        exit(0)
+    if use_hybrid:
+        t1 = threading.Thread(target=keyword_indexing, args=(docs,))
+        t2 = threading.Thread(
+            target=semantic_indexing,
+            args=(embeddings_model_name, processed_path, docs),
+        )
+        t1.start()
+        t2.start()
+        # Wait for them to finish
+        t1.join()
+        t2.join()
+    else:
+        # This use bm25
+        if not use_embedding:
+            keyword_indexing(docs=docs)
 
-        # Load model
-        # index and store the vectors of docs
+        # This Embedding model
+        elif use_embedding and embeddings_model_name:
+            semantic_indexing(
+                embeddings_model_name=embeddings_model_name,
+                processed_path=processed_path,
+                docs=docs,
+            )
 
+        # Should not triggered
+        else:
+            print_red("Error: Somehow something happen")
+            return
 
     # Save chunks as pickle file (binary format) so can
     # be loaded also later to map result to chunk obj

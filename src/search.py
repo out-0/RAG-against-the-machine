@@ -7,6 +7,7 @@ from bm25s.tokenization import Tokenized
 from pydantic_core import PydanticSerializationError
 
 from src.data_models import Chunk, MinimalAnswer, StudentSearchResults
+from src.vector_idx import v_idx_load, v_idx_search
 
 
 def load_retriever(processed_path: str) -> tuple[bm25s.BM25, list[Chunk]]:
@@ -23,7 +24,12 @@ def load_retriever(processed_path: str) -> tuple[bm25s.BM25, list[Chunk]]:
 
 
 def search_one(
-    query: str, k: int | str, retriever: bm25s.BM25, chunks: list[Chunk]
+    query: str,
+    k: int | str,
+    retriever: bm25s.BM25,
+    chunks: list[Chunk],
+    use_hybrid: bool = False,
+    processed_path: str = "data/processed/"
 ) -> list[Chunk]:
     """"""
 
@@ -33,12 +39,49 @@ def search_one(
             raise ValueError("Error: 'k' Excpected positive value")
     except ValueError:
         raise TypeError("Error: 'k', Excpected a number")
-    query_tokens: list[list[str]] | Tokenized = bm25s.tokenize(query)
-    retrieve_result = retriever.retrieve(
-        query_tokens, k=k, return_as="documents"
-    )
-    return [chunks[idx] for idx in retrieve_result[0]]
+ 
 
+
+    def GetKeywordMatching_result() -> ...:
+        """
+        Get keyword matching result 
+        """
+        query_tokens: list[list[str]] | Tokenized = bm25s.tokenize(query)
+        retrieve_result = retriever.retrieve(
+            query_tokens, k=k, return_as="documents"
+        )
+        result = [chunks[idx] for idx in retrieve_result[0]]
+        print(result)
+        
+    def GetSemantic_result(
+        query: str,
+        k: int,
+            index: Index,
+            model: SentencesTransformers,
+            chunks: list[Chunk],
+        ) -> ...:
+        """
+        # get the semantic result
+        """
+        
+        index = v_idx_load(index_path=processed_path)
+        semantic_result = v_idx_search(
+            query=query,
+            k=k,
+            index=index,
+            model=model
+            chunks=chunks,
+        )
+       
+    if use_hybrid:
+        # TODO: FOR HYBRID RUN COncurense
+    elif use_embedding:
+        semantic_result = GetSemantic_result()
+    else:
+        keyword_result = GetKeywordMatching_result()
+    
+    # TODO: RERANK AND COMBINE REULSTS    
+    
 
 def search_batch(
     queries: list[str], k: int, retriever: bm25s.BM25, chunks: list[Chunk]
@@ -77,4 +120,3 @@ def save_to_json_file(
     except (Exception, PydanticSerializationError) as e:
         print(f"Error: Saving result - {e} ⚠️")
         sys.exit(1)
-

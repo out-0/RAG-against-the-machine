@@ -1,0 +1,11 @@
+cuda-pathfinder==1.6.0
+langchain-protocol==0.0.18
+langchain-text-splitters==1.1.2
+langsmith==0.10.15
+mccabe==0.7.0
+nvidia-nvshmem-cu13==3.4.5
+requests-toolbelt==1.0.0
+threadpoolctl==3.6.0
+torch==2.13.0
+typing-extensions==4.16.0
+typing-inspection==0.4.2
