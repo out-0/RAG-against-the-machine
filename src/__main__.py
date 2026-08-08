@@ -10,6 +10,7 @@ import tqdm
 from transformers.tokenization_utils_base import BatchEncoding
 
 from src.answer_generator import get_chat_template, load_model
+from src.custom_print import print_green, print_red, print_yellow
 from src.data_models import (
     AnsweredQuestion,
     CachedResources,
@@ -32,7 +33,6 @@ from src.search import (
     search_batch,
     search_one,
 )
-from src.custom_print import print_green, print_red
 
 
 class Boss:
@@ -93,7 +93,8 @@ class Boss:
         k: int = 1,
         processed_path: str = "data/processed/",
         question_id: str = "0",
-        use_hybrid: bool = False
+        use_hybrid: bool = False,
+        use_embedding: bool = False,
     ) -> MinimalSearchResults | list[str]:
         """"""
 
@@ -116,15 +117,19 @@ class Boss:
             sys.exit()
 
         # TODO: CHECK IF HYBRID USED SO WE RETREIVE THE EMBEDDING ALSO AND COMBINING THE RESULTS
-    
+
         # << Load the retriever AND Chunks that was pickled >>
         retriever, chunks = load_retriever(processed_path)
         # Retrieve results for one question
         retrieve_results: list[Chunk] = search_one(
-            query=query, k=k, retriever=retriever, chunks=chunks
+            query=query,
+            k=k,
+            retriever=retriever,
+            chunks=chunks,
+            use_hybrid=use_hybrid,
+            processed_path=processed_path,
+            use_embedding=use_embedding,
         )
-        exit()
-        
 
         # Build Minimal search result to be returned and used later in answers
         min_search_result: MinimalSearchResults = MinimalSearchResults(
@@ -214,30 +219,12 @@ class Boss:
             )
             sys.exit(1)
 
-        # Check the scope of the questions to determine the output path
-        d_path: Path = Path(dataset_path)
-        questions_scope: str
-        if "AnsweredQuestions" in d_path.parts:
-            questions_scope = "AnsweredQuestions"
-        elif "UnansweredQuestions" in d_path.parts:
-            questions_scope = "UnansweredQuestions"
-        else:
-            print(f"Cannot determine dataset scope from path: {dataset_path}")
-            sys.exit(1)
-
-        # Get validator model based on the scope
-        ValidatorModel: type[AnsweredQuestion | UnansweredQuestion]
-        if questions_scope == "AnsweredQuestions":
-            ValidatorModel = AnsweredQuestion
-        elif questions_scope == "UnansweredQuestions":
-            ValidatorModel = UnansweredQuestion
-
         # Validate each question AND build a list of questions
         # to be used in retrieving
         batch_questions: list[str] = []
         validated_batch: list[AnsweredQuestion | UnansweredQuestion] = []
         for q in dataset_data["rag_questions"]:
-            validated_batch.append(ValidatorModel.model_validate(q))
+            validated_batch.append(UnansweredQuestion.model_validate(q))
             batch_questions.append(q["question"])
 
         try:
@@ -246,6 +233,8 @@ class Boss:
 
             # Load the indexed files
             retriever, chunks = load_retriever(processed_path)
+            # Retrieve the results for the batch of questions,
+            # this will return a list of list of chunks
             batch_results: list[list[Chunk]] = search_batch(
                 queries=batch_questions,
                 k=k,
@@ -288,9 +277,10 @@ class Boss:
             boss_search_result.search_results.append(mini_search_result)
 
         # Create paths if not exist and save the json result
+        dataset_path: Path = Path(dataset_path)
         dir_path: Path = Path(save_directory)
         dir_path.mkdir(parents=True, exist_ok=True)
-        save_file_name = save_file if save_file else d_path.name
+        save_file_name = save_file if save_file else dataset_path.parts[-1]
         full_path: Path = dir_path / save_file_name
         save_to_json_file(file_path=full_path, obj=boss_search_result)
         print_green(f"Saved student_search_results to {full_path}")
@@ -353,10 +343,8 @@ class Boss:
             # the tokenized will apply a padding to match the length of each prompt
             # int the batch so attention mask let the model know which token is real vs pad
 
-            # cast to shut mypy from complaining about the multi types return
-            tokenized_result: BatchEncoding = cast(
-                typ=BatchEncoding,
-                val=tokenizer.apply_chat_template(
+            tokenized_result = (
+                tokenizer.apply_chat_template(
                     conversation=messages,
                     tokenize=True,
                     return_dict=True,
@@ -369,7 +357,10 @@ class Boss:
             sys.exit(1)
 
         # Generate the model response
-        generated_ids = model.generate(**tokenized_result, max_new_tokens=1024)
+        generated_ids = model.generate(
+            **tokenized_result,
+            max_new_tokens=1024,
+        )
 
         # Strip out the initial prompt from the generated result
         prompt_len = tokenized_result["input_ids"].shape[-1]
@@ -460,6 +451,7 @@ class Boss:
         )
 
         for result in tqdm.tqdm(data["search_results"]):
+            # Get the winning chunks for the current question
             winning_chunks = search_one(
                 query=result["question"],
                 k=data["k"],
@@ -467,6 +459,7 @@ class Boss:
                 chunks=chunks,
             )
 
+            # Generate the answer for the current question using the winning chunks
             answer_obj: MinimalAnswer = self.answer(
                 query=result["question"],
                 k=data["k"],
@@ -477,7 +470,6 @@ class Boss:
 
             final_boss.search_results.append(answer_obj)
 
-        print("all done")
         return final_boss
 
     def evaluate(
@@ -609,6 +601,7 @@ class Boss:
     ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⣶⣾⣿⠏⠀⢸⣿⠀⠀⣿⡷⠀⠀⠹⣿⣿⠀⢸⣿⣿⣿⣿⣿⡆⢸⣿⡆⠀⢿⡿⠀⢰⣿⡇⢀⣿⡏⠀⠀⠀⢹⣿⡀⠀⠀⠀⠀⠈⡆⠀⠀⠀
     ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠀⠀⠀⠈⠉⠀⠀⠉⠁⠀⠀⠀⠉⠉⠀⠈⠉⠉⠈⠉⠉⠁⠈⠉⠀⠀⠈⠁⠀⠀⠉⠁⠈⠉⠀⠀⠀⠀⠈⠉⠁⠐⡀⠀⠀⠀⠀⠀⠀⠀
 """)
+
 
 if __name__ == "__main__":
     fire.Fire(component=Boss)

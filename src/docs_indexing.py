@@ -119,7 +119,7 @@ def indexing(
 
         # Should not triggered
         else:
-            print_red("Error: Somehow something happen")
+            print_red("Error: Somehow something happen\n")
             return
 
     # Save chunks as pickle file (binary format) so can
