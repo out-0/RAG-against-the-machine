@@ -21,6 +21,7 @@ lint:
 
 clean:
 	@rm -rf data/output/search_results
+	@rm -rf data/processed/*
 	@rm -rf .mypy_cache
 	@rm -rf .ruff_cache
 	@rm -rf __pycache__
