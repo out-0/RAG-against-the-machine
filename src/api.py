@@ -12,17 +12,73 @@ boss = Boss()
 
 
 @app.get("/")
-def SayHello() -> dict:
+def home() -> dict:
     # TODO: COMPLETING THIS MESSAGE
     message: dict = {
         "message": "Hello, you can use the next entrypoints",
         "entries": {
-            "/index": {"method": "POST", "parameters": ["max_chunk_size", "raw_path", "processed_path", "embedding_model_name", "use_embedding"]},
-            "/search": {"method": "GET", "parameters": ["query", "k", "processed_path", "question_id", "use_hybrid", "use_embedding"]},
-            "/search_dataset": {"method": "POST", "parameters": ["dataset_path", "k", "save_directory", "processed_path", "save_file"]},
-            "/answer": {"method": "POST", "parameters": ["query", "k", "generator_model_name", "cache_dir", "processed_path", "question_id", "save_path"]},
-            "/answer_dataset": {"method": "POST", "parameters": ["student_search_results_path", "save_directory", "generator_model_name", "cache_dir", "processed_path", "save_path"]},
-            "/evaluate": {"method": "POST", "parameters": ["student_search_results_path", "dataset_path", "k"]},
+            "/index": {
+                "method": "POST",
+                "parameters": [
+                    "max_chunk_size",
+                    "raw_path",
+                    "processed_path",
+                    "embedding_model_name",
+                    "use_embedding",
+                ],
+            },
+            "/search": {
+                "method": "GET",
+                "parameters": [
+                    "query",
+                    "k",
+                    "processed_path",
+                    "question_id",
+                    "use_hybrid",
+                    "use_embedding",
+                ],
+            },
+            "/search_dataset": {
+                "method": "POST",
+                "parameters": [
+                    "dataset_path",
+                    "k",
+                    "save_directory",
+                    "processed_path",
+                    "save_file",
+                ],
+            },
+            "/answer": {
+                "method": "POST",
+                "parameters": [
+                    "query",
+                    "k",
+                    "generator_model_name",
+                    "cache_dir",
+                    "processed_path",
+                    "question_id",
+                    "save_path",
+                ],
+            },
+            "/answer_dataset": {
+                "method": "POST",
+                "parameters": [
+                    "student_search_results_path",
+                    "save_directory",
+                    "generator_model_name",
+                    "cache_dir",
+                    "processed_path",
+                    "save_path",
+                ],
+            },
+            "/evaluate": {
+                "method": "POST",
+                "parameters": [
+                    "student_search_results_path",
+                    "dataset_path",
+                    "k",
+                ],
+            },
         },
     }
     return message
@@ -35,7 +91,8 @@ def index_endpoint(
     processed_path: str = "data/processed/",
     embedding_model_name: str | None = "all-MiniLM-L6-v2",
     use_embedding: bool = False,
-) -> None:
+) -> dict:
+    """Endpoint action for index operation"""
     boss.index(
         max_chunk_size=max_chunk_size,
         raw_path=raw_path,
@@ -43,6 +100,7 @@ def index_endpoint(
         embedding_model_name=embedding_model_name,
         use_embedding=use_embedding,
     )
+    return {"Status": "Index Success"}
 
 
 @app.get("/search")
@@ -69,10 +127,10 @@ def search_endpoint(
 def search_dataset_endpoint(
     dataset_path: str,
     k: int = 1,
-    save_directory: str = "data/output/search_results/",
+    save_directory: str = "data/output/search_results/UnansweredQuestions",
     processed_path: str = "data/processed/",
     save_file: str | None = None,
-) -> None:
+) -> dict:
     boss.search_dataset(
         dataset_path=dataset_path,
         k=k,
@@ -80,6 +138,8 @@ def search_dataset_endpoint(
         processed_path=processed_path,
         save_file=save_file,
     )
+
+    return {"Status": f"Search Success, Saved Under {save_directory}"}
 
 
 @app.post("/answer")
@@ -133,4 +193,3 @@ def evaluate_endpoint(
         dataset_path=dataset_path,
         k=k,
     )
-

@@ -7,20 +7,27 @@ from transformers import (
 )
 
 from src.data_models import Chunk
+import torch
 
+from huggingface_hub import logging
 
 def load_model(model_name: str, cache_dir: str | None) -> tuple[Any, Any]:
     """"""
 
+    logging.set_verbosity_error() # Turn off the huggingface unauthenticated warning
+
     # Override default huggingface cache_dir if provided
     handle_cache_dir(cache_dir=cache_dir)
+
+    # Detect device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Load the model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(
         pretrained_model_name_or_path=model_name,
-        dtype="auto",  # TODO: CHECK THIS LATER
-        device_map="auto",
     )
+    model = model.to(device)
+
     tokenizer = AutoTokenizer.from_pretrained(
         pretrained_model_name_or_path=model_name
     )
