@@ -50,9 +50,9 @@ class Boss:
         max_chunk_size: int = 2000,
         raw_path: str = "data/raw/vllm-0.10.1",
         processed_path: str = "data/processed/",
-        # method: str = "bm25", # TODO: MAYBE ADD ANOTHER METHODS LATER
         embedding_model_name: str | None = "all-MiniLM-L6-v2",
         use_embedding: bool = False,
+        incremental: bool = False,
     ) -> None:
         """A quick method which fired by the CMD line argument,
         Its manage the indexing stage
@@ -70,15 +70,21 @@ class Boss:
             # Load the files into program
             docs: list[Document] = load_files(input_path=raw_path)
 
+            # TODO: IMPLEMENT AN INCREMENTAL INDEXING
+            if incremental:
+                handle_incremental_indexing()
+
+
             # Build the chunker and start processing the files
             chunker: Chunker = Chunker(files=docs, max_size=max_chunk_size)
             chunks: list[Chunk] = chunker.process_files()
-            print([len(c.content) for c in chunks])
+
+
+            # TODO: IMPLEMENT AN INCREMENTAL INDEXING
             # Run the main index processing
             indexing(
                 chunks=chunks,
                 processed_path=processed_path,
-                # method=method,
                 use_embedding=use_embedding,
                 embeddings_model_name=embedding_model_name,
             )
@@ -599,12 +605,11 @@ class Boss:
     ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⣶⣾⣿⠏⠀⢸⣿⠀⠀⣿⡷⠀⠀⠹⣿⣿⠀⢸⣿⣿⣿⣿⣿⡆⢸⣿⡆⠀⢿⡿⠀⢰⣿⡇⢀⣿⡏⠀⠀⠀⢹⣿⡀⠀⠀⠀⠀⠈⡆⠀⠀⠀
     ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠀⠀⠀⠈⠉⠀⠀⠉⠁⠀⠀⠀⠉⠉⠀⠈⠉⠉⠈⠉⠉⠁⠈⠉⠀⠀⠈⠁⠀⠀⠉⠁⠈⠉⠀⠀⠀⠀⠈⠉⠁⠐⡀⠀⠀⠀⠀⠀⠀⠀
 """)
+        return {
+            f"Recall@{k}": f"{final_result:.3f} ({final_result * 100:.2f}%)"
+        }
 
 
 def main() -> None:
     """"""
     fire.Fire(component=Boss)
-
-
-if __name__ == "__main__":
-    main()

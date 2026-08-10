@@ -187,9 +187,10 @@ def evaluate_endpoint(
     student_search_results_path: str,
     dataset_path: str,
     k: int,
-) -> None:
-    boss.evaluate(
+) -> dict:
+    result: dict = boss.evaluate(
         student_search_results_path=student_search_results_path,
         dataset_path=dataset_path,
         k=k,
     )
+    return result
