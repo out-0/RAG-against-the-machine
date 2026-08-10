@@ -5,6 +5,7 @@ from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 
 from src.data_models import Chunk
 from src.docs_loading import Document
+from src.custom_print import print_red
 
 
 class Chunker:
@@ -34,7 +35,7 @@ class Chunker:
 
     def _get_splitter_for_file(
         self, file_path: str
-    ) -> RecursiveCharacterTextSplitter:
+    ) -> RecursiveCharacterTextSplitter | None:
         """Selects a language-appropriate splitter based on file extension.
 
         Args:
@@ -63,12 +64,8 @@ class Chunker:
                 add_start_index=True,
             )
 
-        # Fallback splitter for generic plain text
-        return RecursiveCharacterTextSplitter(
-            chunk_size=self.max_size,
-            chunk_overlap=self.overlap,
-            add_start_index=True,
-        )
+        print_red("Warning: Somehow now files to get chunked")
+        return
 
     def process_files(self) -> list[Chunk]:
         """Processes all documents and outputs structured Chunk instances.

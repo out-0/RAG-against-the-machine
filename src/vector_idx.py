@@ -77,7 +77,7 @@ def v_idx_build_and_save(
 
     # Create FAISS index table with correct dimension
     dim = embeddings.shape[1]
-    index = faiss.IndexFlatIP(dim)
+    index = faiss.IndexIDMap(dim) # TODO: CHECK LATER IF CHANGING THE STRATEGY AFFTECT ANY NEXT CODE.
 
     # Add the vectors to the index
     index.add(embeddings)

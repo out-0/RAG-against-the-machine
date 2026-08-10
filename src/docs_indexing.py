@@ -33,7 +33,6 @@ from src.vector_idx import v_idx_build_and_save
 def indexing(
     chunks: list[Chunk] | None = None,
     processed_path: str = "data/processed",
-    # method: str = "bm25",
     use_embedding: bool = False,
     embeddings_model_name: str | None = "all-MiniLM-L6-v2",
     use_hybrid: bool = False,
@@ -126,7 +125,8 @@ def indexing(
     # be loaded also later to map result to chunk obj
     with open(Path(processed_path) / "chunks.pkl", "wb") as f:
         pickle.dump(chunks, f)
-        print("Chunks saved as pickle file for later mapping to results")
+        # print("Chunks saved as pickle file for later mapping to results")
+
 
 
 # class Tf_idf_search:
