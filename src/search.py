@@ -1,13 +1,13 @@
 import pickle
 import sys
 from pathlib import Path
-from typing import Optional
 
 import bm25s
 from bm25s.tokenization import Tokenized
 from pydantic_core import PydanticSerializationError
 from sentence_transformers import SentenceTransformer
 
+from src.custom_print import print_red
 from src.data_models import Chunk, MinimalAnswer, StudentSearchResults
 from src.vector_idx import v_idx_load, v_idx_search
 
@@ -93,6 +93,10 @@ def search_one(
 
     # Decide which mode to run
     if use_hybrid:
+        # Check if query is cached so we can return cached result
+        result: list[Chunk] | None = check_if_query_cached(query)
+        if result:
+            return result
         bm25_results = GetKeywordMatching_result()
         embed_results = GetSemantic_result()
 
@@ -129,16 +133,29 @@ def search_one(
         ranked = sorted(
             combined_scores.items(), key=lambda x: x[1], reverse=True
         )[:k]
-        print("ranked", ranked)
-        # return [(id_to_chunk[chunk_id], score) for chunk_id, score in ranked]
+
+        # save query result before returning
+        save_query_result(query, ranked)
         return [id_to_chunk[chunk_id] for chunk_id, _ in ranked]
 
     elif use_embedding:
+        # check if query already cached return the cached result
+        result = check_if_query_cached()
+        if result:
+            return result
         embed_result = GetSemantic_result()
+        # save query result before returning
+        save_query_result(query, embed_result)
         return [chunk for chunk, _ in embed_result][:k]
 
     else:
+        # check if query already cached return the cached result
+        result = check_if_query_cached()
+        if result:
+            return result
         bm25_results = GetKeywordMatching_result()
+        # save query result before returning
+        save_query_result(query, bm25_results)
         return [chunk for chunk, _ in bm25_results][:k]
 
 
@@ -217,4 +234,64 @@ def save_to_json_file(
 
     except (Exception, PydanticSerializationError) as e:
         print(f"Error: Saving result - {e} ⚠️")
+        sys.exit(1)
+
+
+# save query result (caching) to speed up repeated queries
+def save_query_result(
+    query: str, result: list[Chunk], processed_path: str
+) -> None:
+    """
+    Saves the query result to a cache file for future use.
+
+    Args:
+        query (str): The query string.
+        result (list[Chunk]): The result of the query, a list of Chunk objects.
+
+    Returns:
+        None
+    """
+
+    try:
+        with open("cached_queries.pkl", "rb") as f:
+            cached_queries = pickle.load(f)
+    except FileNotFoundError:
+        cached_queries = {}
+    except Exception as e:
+        print_red("Error: during loading cached queries - " + e)
+        sys.exit(1)
+
+    cached_queries[query] = result
+
+    with open(Path(processed_path) / "cached_queries.pkl", "wb") as f:
+        pickle.dump(cached_queries, f)
+
+
+def check_if_query_cached(
+    query: str, processed_path: str
+) -> list[Chunk] | None:
+    """
+    Checks if a query is already cached and returns the result if it is.
+
+    Args:
+        query (str): The query string to check.
+        processed_path (str): The path to the processed data.
+
+    Returns:
+        list[Chunk] | None: The cached result if it exists, None otherwise.
+    """
+
+    try:
+        with open(Path(processed_path) / "cached_queries.pkl", "rb") as f:
+            cached_queries = pickle.load(f)
+
+        if query in cached_queries:
+            return cached_queries[query]
+        else:
+            return None
+
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        print_red("Error: during loading cached queries - " + e)
         sys.exit(1)
