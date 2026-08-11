@@ -248,6 +248,7 @@ class Boss:
                 k=k,
                 retriever=retriever,
                 chunks=chunks,
+                processed_path=processed_path,
             )
         except Exception as e:
             print_red(e)
@@ -322,6 +323,7 @@ class Boss:
                     k=k,
                     retriever=retriever,
                     chunks=chunks,
+                    processed_path=processed_path,
                 )
 
                 # Load model
@@ -466,6 +468,7 @@ class Boss:
                 k=data["k"],
                 retriever=retriever,
                 chunks=chunks,
+                processed_path=processed_path,
             )
 
             # Generate the answer for the current question using the winning chunks

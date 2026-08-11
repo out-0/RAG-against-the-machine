@@ -94,8 +94,11 @@ def search_one(
     # Decide which mode to run
     if use_hybrid:
         # Check if query is cached so we can return cached result
-        result: list[Chunk] | None = check_if_query_cached(query)
-        if result:
+        result: list[Chunk] | None = check_if_query_cached(
+            query=query,
+            processed_path=processed_path,
+        )
+        if result is not None:
             return result
         bm25_results = GetKeywordMatching_result()
         embed_results = GetSemantic_result()
@@ -134,33 +137,58 @@ def search_one(
             combined_scores.items(), key=lambda x: x[1], reverse=True
         )[:k]
 
+        ranked_chunks = [id_to_chunk[chunk_id] for chunk_id, _ in ranked]
         # save query result before returning
-        save_query_result(query, ranked)
-        return [id_to_chunk[chunk_id] for chunk_id, _ in ranked]
+        save_query_result(
+            query=query,
+            result=ranked_chunks,
+            processed_path=processed_path,
+        )
+        return ranked_chunks
 
     elif use_embedding:
         # check if query already cached return the cached result
-        result = check_if_query_cached()
-        if result:
+        result = check_if_query_cached(
+            query=query,
+            processed_path=processed_path,
+        )
+        if result is not None:
             return result
         embed_result = GetSemantic_result()
+        ranked_chunks = [chunk for chunk, _ in embed_result][:k]
         # save query result before returning
-        save_query_result(query, embed_result)
-        return [chunk for chunk, _ in embed_result][:k]
+        save_query_result(
+            query=query,
+            result=ranked_chunks,
+            processed_path=processed_path,
+        )
+        return ranked_chunks
 
     else:
         # check if query already cached return the cached result
-        result = check_if_query_cached()
-        if result:
+        result = check_if_query_cached(
+            query=query,
+            processed_path=processed_path,
+        )
+        if result is not None:
             return result
         bm25_results = GetKeywordMatching_result()
+        ranked_chunks = [chunk for chunk, _ in bm25_results][:k]
         # save query result before returning
-        save_query_result(query, bm25_results)
-        return [chunk for chunk, _ in bm25_results][:k]
+        save_query_result(
+            query=query,
+            result=ranked_chunks,
+            processed_path=processed_path,
+        )
+        return ranked_chunks
 
 
 def search_batch(
-    queries: list[str], k: int, retriever: bm25s.BM25, chunks: list[Chunk]
+    queries: list[str],
+    k: int,
+    retriever: bm25s.BM25,
+    chunks: list[Chunk],
+    processed_path: str = "data/processed/",
 ) -> list[list[Chunk]]:
     """
     Retreiving for batch of questions using the above search one,
@@ -175,7 +203,16 @@ def search_batch(
     Returns:
         - list that hold list of chunks for each question
     """
-    return [search_one(query, k, retriever, chunks) for query in queries]
+    return [
+        search_one(
+            query=query,
+            k=k,
+            retriever=retriever,
+            chunks=chunks,
+            processed_path=processed_path,
+        )
+        for query in queries
+    ]
 
 
 def save_to_json_file(
@@ -239,7 +276,9 @@ def save_to_json_file(
 
 # save query result (caching) to speed up repeated queries
 def save_query_result(
-    query: str, result: list[Chunk], processed_path: str
+    query: str,
+    result: list[Chunk],
+    processed_path: str,
 ) -> None:
     """
     Saves the query result to a cache file for future use.
@@ -252,18 +291,20 @@ def save_query_result(
         None
     """
 
+    cache_file = Path(processed_path) / "cached_queries.pkl"
+
     try:
-        with open("cached_queries.pkl", "rb") as f:
+        with open(cache_file, "rb") as f:
             cached_queries = pickle.load(f)
     except FileNotFoundError:
         cached_queries = {}
     except Exception as e:
-        print_red("Error: during loading cached queries - " + e)
+        print_red(f"Error: during loading cached queries - {e}")
         sys.exit(1)
 
     cached_queries[query] = result
 
-    with open(Path(processed_path) / "cached_queries.pkl", "wb") as f:
+    with open(cache_file, "wb") as f:
         pickle.dump(cached_queries, f)
 
 
@@ -281,17 +322,18 @@ def check_if_query_cached(
         list[Chunk] | None: The cached result if it exists, None otherwise.
     """
 
+    cache_file = Path(processed_path) / "cached_queries.pkl"
+
     try:
-        with open(Path(processed_path) / "cached_queries.pkl", "rb") as f:
+        with open(cache_file, "rb") as f:
             cached_queries = pickle.load(f)
 
         if query in cached_queries:
             return cached_queries[query]
-        else:
-            return None
+        return None
 
     except FileNotFoundError:
         return None
     except Exception as e:
-        print_red("Error: during loading cached queries - " + e)
+        print_red(f"Error: during loading cached queries - {e}")
         sys.exit(1)
