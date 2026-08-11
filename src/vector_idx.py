@@ -7,19 +7,18 @@ from sentence_transformers import SentenceTransformer
 from src.custom_print import print_green, print_yellow
 from src.docs_chunking import Chunk
 
-# FAISS search class for semantic search using embeddings
+# FAISS search is used for semantic search using embeddings
 # Also store the vectors in FAISS index for efficient retrieval
 
-
 def v_idx_build_and_save(
-    model_name: str, index_save_dir: str, chunks: list[str]
+    model_name: str, index_save_dir: str, chunks: list[Chunk]
 ) -> None:
     """Encodes docs, builds the FAISS index, and saves it.
 
     Args:
         model_name: sentence-transformers model name
         index_save_dir: directory to save index.faiss
-        chunks: list of document strings to embed
+        chunks: list of Chunk objects to embed and index
     """
 
     # Load the embedding model
@@ -28,19 +27,21 @@ def v_idx_build_and_save(
     if not chunks:
         raise ValueError("No documents provided to build the index")
 
+    docs = [chunk.content for chunk in chunks]
+    ids = np.array([chunk.id for chunk in chunks], dtype=np.int64)
+
     # count the number of tokens in each chunk to see if any exceed the model's max sequence length
     reducing_needed: int = 0
     token_lengths: list[int] = []
-    for chunk in chunks:
-        # Count tokens
-        # try:
-        chunk_token_len: int = len(model.tokenizer.encode(chunk, verbose=False))
-        # except Exception:
-        #     # fall back to a rough token estimate
-        #     chunk_token_len = len(chunk.split())
-
+    for doc in docs:
+        try:
+            chunk_token_len: int = len(
+                model.tokenizer.encode(doc, verbose=False)
+            )
+        except Exception:
+            chunk_token_len = len(doc.split())
         token_lengths.append(chunk_token_len)
-        if chunk_token_len > model.max_seq_length:
+        if chunk_token_len > getattr(model, "max_seq_length", 512):
             reducing_needed = 1
 
     print("\n===== State =====")
@@ -67,7 +68,7 @@ def v_idx_build_and_save(
 
     # Embed documents
     embeddings = model.encode(
-        chunks,
+        docs,
         show_progress_bar=True,
         convert_to_numpy=True,
     )
@@ -75,12 +76,13 @@ def v_idx_build_and_save(
     # Ensure float32
     embeddings = embeddings.astype("float32")
 
-    # Create FAISS index table with correct dimension
+    # Create FAISS index table with correct dimension and stable ids
     dim = embeddings.shape[1]
-    index = faiss.IndexIDMap(dim) # TODO: CHECK LATER IF CHANGING THE STRATEGY AFFTECT ANY NEXT CODE.
+    base_index = faiss.IndexFlatIP(dim)
+    index = faiss.IndexIDMap2(base_index)
 
-    # Add the vectors to the index
-    index.add(embeddings)
+    # Add the vectors to the index with stable chunk ids
+    index.add_with_ids(embeddings, ids)
 
     # Save to a single file
     faiss.write_index(index, str(Path(index_save_dir) / "index.faiss"))
@@ -113,15 +115,20 @@ def v_idx_search(
     query_vector = query_vector.astype("float32")
 
     # Search (Returns distances and IDs)
-    score_distances, chunks_indices = index.search(query_vector, k)
+    score_distances, chunk_ids = index.search(query_vector, k)
 
+    # A lookup table map chunk ids to chunks to extract the real chunks from
+    # the ids returned from faiss
+    chunk_lookup = {chunk.id: chunk for chunk in chunks}
     results: list[tuple[Chunk, float]] = []
-    # Since we processing single query, we can just take the first row of distances and indices
-    # Maybe later support batch queries, then we need to loop over each row
-    for dist, idx in zip(score_distances[0], chunks_indices[0]):
+   
+    for dist, idx in zip(score_distances[0], chunk_ids[0]):
         if idx == -1:
             continue
         score = float(dist)
-        results.append((chunks[idx], score))
+        # Just a defensive check
+        if idx not in chunk_lookup:
+            continue
+        results.append((chunk_lookup[idx], score))
 
     return results

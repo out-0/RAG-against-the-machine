@@ -24,6 +24,7 @@ from src.data_models import (
 from src.docs_chunking import Chunker
 from src.docs_indexing import indexing
 from src.docs_loading import Document, load_files
+from src.incremental_indexing import handle_incremental_indexing
 from src.recall import rag_recall_at_k
 from src.search import (
     load_retriever,
@@ -70,17 +71,21 @@ class Boss:
             # Load the files into program
             docs: list[Document] = load_files(input_path=raw_path)
 
-            # TODO: IMPLEMENT AN INCREMENTAL INDEXING
+            # Handle incremental indexing if enabled
             if incremental:
-                handle_incremental_indexing()
-
+                handle_incremental_indexing(
+                    docs=docs,
+                    processed_path=processed_path,
+                    max_chunk_size=max_chunk_size,
+                    use_embedding=use_embedding,
+                    embeddings_model_name=embedding_model_name,
+                )
+                return
 
             # Build the chunker and start processing the files
             chunker: Chunker = Chunker(files=docs, max_size=max_chunk_size)
             chunks: list[Chunk] = chunker.process_files()
 
-
-            # TODO: IMPLEMENT AN INCREMENTAL INDEXING
             # Run the main index processing
             indexing(
                 chunks=chunks,
@@ -613,3 +618,4 @@ class Boss:
 def main() -> None:
     """"""
     fire.Fire(component=Boss)
+
