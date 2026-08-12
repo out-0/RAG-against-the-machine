@@ -8,7 +8,12 @@ from pydantic_core import PydanticSerializationError
 from sentence_transformers import SentenceTransformer
 
 from src.custom_print import print_red
-from src.data_models import Chunk, MinimalAnswer, StudentSearchResults
+from src.data_models import (
+    Chunk,
+    MinimalAnswer,
+    StudentSearchResults,
+    StudentSearchResultsAndAnswer,
+)
 from src.vector_idx import v_idx_load, v_idx_search
 
 
@@ -217,46 +222,7 @@ def search_batch(
 
 def save_to_json_file(
     file_path: str | Path,
-    obj: StudentSearchResults | MinimalAnswer,
-) -> None:
-    """
-    Typically the obj should be as specified in type hint
-    or at least a data model or buildin types that support
-    json representation.
-
-    """
-
-    try:
-        with open(file_path, "w") as f:
-            f.write(obj.model_dump_json())
-
-    except (Exception, PydanticSerializationError) as e:
-        print(f"Error: Saving result - {e} ⚠️")
-        sys.exit(1)
-
-
-def search_batch(
-    queries: list[str], k: int, retriever: bm25s.BM25, chunks: list[Chunk]
-) -> list[list[Chunk]]:
-    """
-    Retreiving for batch of questions using the above search one,
-    the retriever and chuns should be reloaded before calling this
-    functions,
-
-    Args:
-        - queries: list of questions
-        - top_k: how much chunk retrieved for each question
-        - retriever: BM25 map object which already indexed and ready
-        - chunks: the global chunks to be mapped for the results
-    Returns:
-        - list that hold list of chunks for each question
-    """
-    return [search_one(q, k, retriever, chunks) for q in queries]
-
-
-def save_to_json_file(
-    file_path: str | Path,
-    obj: StudentSearchResults | MinimalAnswer,
+    obj: StudentSearchResults | MinimalAnswer | StudentSearchResultsAndAnswer,
 ) -> None:
     """
     Typically the obj should be as specified in type hint

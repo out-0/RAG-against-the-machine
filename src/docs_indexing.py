@@ -19,13 +19,14 @@ the attentions between the terms or phrases
 """
 
 import pickle
-from pathlib import Path
 import threading
+from pathlib import Path
+
 import bm25s
-import torch
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import semantic_search
-from src.custom_print import print_green, print_yellow, print_red
+
+from src.custom_print import print_green, print_red, print_yellow
 from src.data_models import Chunk
 from src.vector_idx import v_idx_build_and_save
 
@@ -126,7 +127,6 @@ def indexing(
     with open(Path(processed_path) / "chunks.pkl", "wb") as f:
         pickle.dump(chunks, f)
         # print("Chunks saved as pickle file for later mapping to results")
-
 
 
 # class Tf_idf_search:

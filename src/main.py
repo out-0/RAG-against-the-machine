@@ -3,7 +3,6 @@ import json
 import sys
 from pathlib import Path
 
-import bm25s
 import fire
 import tqdm
 
@@ -35,15 +34,8 @@ from src.search import (
 
 
 class Boss:
-    """_summary_
-
-    Raises:
-        TypeError: _description_
-        TypeError: _description_
-        ValueError: _description_
-
-    Returns:
-        _type_: _description_
+    """
+    This is the main class of the program
     """
 
     def index(
@@ -55,9 +47,7 @@ class Boss:
         use_embedding: bool = False,
         incremental: bool = False,
     ) -> None:
-        """A quick method which fired by the CMD line argument,
-        Its manage the indexing stage
-        """
+        """ """
         print_green("""
     ██╗███╗   ██╗██████╗ ███████╗██╗  ██╗
     ██║████╗  ██║██╔══██╗██╔════╝╚██╗██╔╝
@@ -175,15 +165,7 @@ class Boss:
         processed_path: str = "data/processed/",
         save_file: str | None = None,
     ) -> None:
-        # TODO: IMPROVE LATER
-        """
-        Reach a batch of questions from the provided dataset path and operate
-        search over all of them after validating the loaded questions,
-
-        Args:
-
-        Returns:
-        """
+        """ """
 
         print_green("""
     ███████╗███████╗ █████╗ ██████╗  ██████╗██╗  ██╗
@@ -327,7 +309,6 @@ class Boss:
                 )
 
                 # Load model
-                # TODO: MAYBE LATER MAKE IT HANDLE ANOTHER MODELS
                 model, tokenizer = load_model(
                     model_name=generator_model_name, cache_dir=cache_dir
                 )
@@ -428,8 +409,6 @@ class Boss:
         generator_model_name: str = "Qwen/Qwen3-0.6B",
         cache_dir: str | None = None,
         processed_path: str = "data/processed/",
-        # question_id: str = "0",
-        save_path: str | None = None,
     ) -> StudentSearchResultsAndAnswer:
         """"""
 
@@ -463,6 +442,7 @@ class Boss:
 
         for result in tqdm.tqdm(data["search_results"]):
             # Get the winning chunks for the current question
+            # To be used in answer below
             winning_chunks = search_one(
                 query=result["question"],
                 k=data["k"],
@@ -482,6 +462,16 @@ class Boss:
 
             final_boss.search_results.append(answer_obj)
 
+        # Save the result
+        search_result_path = Path(student_search_results_path)
+        file_name = search_result_path.name
+        save_path = search_result_path.parent / file_name
+        save_to_json_file(file_path=save_path, obj=final_boss)
+        print_green(
+            f"Saved student_search_results_and_answer "
+            f"to {save_directory}{file_name}"
+        )
+
         return final_boss
 
     def evaluate(
@@ -489,7 +479,7 @@ class Boss:
         student_search_results_path: str,
         dataset_path: str,
         k: int,
-    ) -> None:
+    ) -> dict[str, str]:
         """
         This is query level formula:
         Recall@k = (Number of queries with target in top-k) / (Total queries)
@@ -544,7 +534,7 @@ class Boss:
                     "Warning: Expecting a match between questions "
                     "count withing two data provided"
                 )
-                return
+                return {"Error": "Internal Data Mismatch"}
         except KeyError as e:
             print(e)
             sys.exit(1)
@@ -602,7 +592,6 @@ class Boss:
     ⣯⣯⠸⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠄⠀⠈⠀⠁⠀⠀⠀⠀⠀⠀⠀⠂⠀⠀⠏⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠧⠍⠶⠤⠈⣆⠀⠀⠀⠀⠀⠀⠀⣷⡻⠀⣼⠀⠀⠀
     ⣯⣨⡀⢀⡠⠤⣐⠤⣀⣰⠔⠊⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠁⠑⠐⠐⠢⠺⠥⡾⠉⡠⠀⠀⠀
     ⠋⠙⠈⠉⠉⠁⠈⠈⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-    ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
     ⠓⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
     ⠀⠀⠇⣣⡁⢶⣠⢀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⢶⠀⡶⣲⠀⣆⡒⣰⠒⢦⢰⠀⢰⡆⣴⠐⣶⠒⣐⣒⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣴⣺⣿⣿⣿⠛
     ⠀⠀⠑⢌⠻⣗⣔⠉⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠞⠚⠃⠻⠴⠃⠦⠝⠘⠤⠎⠸⠤⠘⠧⠞⠀⠛⠀⠰⠤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⡟⣾⣿⣿⣿⠃⠀
@@ -621,4 +610,3 @@ class Boss:
 def main() -> None:
     """"""
     fire.Fire(component=Boss)
-
