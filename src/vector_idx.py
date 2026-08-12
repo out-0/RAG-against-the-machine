@@ -10,6 +10,7 @@ from src.docs_chunking import Chunk
 # FAISS search is used for semantic search using embeddings
 # Also store the vectors in FAISS index for efficient retrieval
 
+
 def v_idx_build_and_save(
     model_name: str, index_save_dir: str, chunks: list[Chunk]
 ) -> None:
@@ -30,16 +31,21 @@ def v_idx_build_and_save(
     docs = [chunk.content for chunk in chunks]
     ids = np.array([chunk.id for chunk in chunks], dtype=np.int64)
 
-    # count the number of tokens in each chunk to see if any exceed the model's max sequence length
+    # count the number of tokens in each chunk to see if any exceed the model's
+    # max sequence length
     reducing_needed: int = 0
     token_lengths: list[int] = []
+
+    # A Useless loop to help for printing the formated state below
     for doc in docs:
         try:
             chunk_token_len: int = len(
                 model.tokenizer.encode(doc, verbose=False)
             )
+
         except Exception:
             chunk_token_len = len(doc.split())
+
         token_lengths.append(chunk_token_len)
         if chunk_token_len > getattr(model, "max_seq_length", 512):
             reducing_needed = 1
@@ -60,9 +66,10 @@ def v_idx_build_and_save(
             f"WARNING: Some chunks exceed the model's max sequence length of {getattr(model, 'max_seq_length', 'unknown')} tokens."
         )
         print_green("Recommendation:")
-        print("     Reduce --max_chunk_size to around 900-1100 characters.")
+        print("  Reduce --max_chunk_size to around 900-1100 characters.")
         print(
-            "     Otherwise, some chunks will be truncated and may lose some information."
+            "   Otherwise, some chunks will be truncated and may lose "
+            "   some information."
         )
     print("===== ===== =====\n")
 
@@ -77,8 +84,12 @@ def v_idx_build_and_save(
     embeddings = embeddings.astype("float32")
 
     # Create FAISS index table with correct dimension and stable ids
+    # dim is vector dimension size (the number of float numbers that
+    # make up a single vector)
     dim = embeddings.shape[1]
+    # The base engine that calculates similarity
     base_index = faiss.IndexFlatIP(dim)
+    # The index table to map vectors to chunk ids (for incremental updates)
     index = faiss.IndexIDMap2(base_index)
 
     # Add the vectors to the index with stable chunk ids
@@ -121,7 +132,7 @@ def v_idx_search(
     # the ids returned from faiss
     chunk_lookup = {chunk.id: chunk for chunk in chunks}
     results: list[tuple[Chunk, float]] = []
-   
+
     for dist, idx in zip(score_distances[0], chunk_ids[0]):
         if idx == -1:
             continue
