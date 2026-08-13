@@ -253,7 +253,21 @@ class Boss:
         use_hybrid: bool = False,
         use_embedding: bool = False,
     ) -> None:
-        """ """
+        """
+        Search a dataset of questions and save the results
+
+        Args:
+            - dataset_path: path to the dataset
+            - k: number of chunks to be retrieved for each question
+            - save_directory: directory to save the results
+            - processed_path: path to the processed files
+            - save_file: name of the file to save the results
+            - use_hybrid: use hybrid search or not
+            - use_embedding: use embedding search or not
+
+        Returns:
+            - None
+        """
 
         print_green("""
     ███████╗███████╗ █████╗ ██████╗  ██████╗██╗  ██╗
@@ -358,10 +372,10 @@ class Boss:
             boss_search_result.search_results.append(mini_search_result)
 
         # Create paths if not exist and save the json result
-        dataset_path: Path = Path(dataset_path)
+        dataset_path_p: Path = Path(dataset_path)
         dir_path: Path = Path(save_directory)
         dir_path.mkdir(parents=True, exist_ok=True)
-        save_file_name = save_file if save_file else dataset_path.parts[-1]
+        save_file_name = save_file if save_file else dataset_path_p.parts[-1]
         full_path: Path = dir_path / save_file_name
         save_to_json_file(file_path=full_path, obj=boss_search_result)
         print_green(f"Saved student_search_results to {full_path}")
@@ -528,7 +542,7 @@ class Boss:
 
             print(f"Loaded {data['search_results']} questions")
         except Exception as e:
-            print_red(e)
+            print_red(e.args[0])
             sys.exit(1)
 
         # Load the model

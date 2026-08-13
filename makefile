@@ -9,7 +9,7 @@ debug:
 	uv run python3 -m pdb -m src
 
 lint:
-	flake8 --extend-exclude .venv,data/  .
+	flake8 .
 	mypy . \
 	--warn-return-any \
 	--warn-unused-ignores \

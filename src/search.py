@@ -298,7 +298,7 @@ def check_if_query_cached(
 
     try:
         with open(cache_file, "rb") as f:
-            cached_queries = pickle.load(f)
+            cached_queries: dict[str, list] = pickle.load(f)
 
         if query in cached_queries:
             return cached_queries[query]

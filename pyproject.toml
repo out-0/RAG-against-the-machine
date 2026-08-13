@@ -21,7 +21,7 @@ dependencies = [
 
 # Let mypy Recognaize pydantic dataclasses
 [tool.mypy]
-plugins = ["pydantic.mypy"]
+exclude = '^data/'
 
 [tool.ruff]
 line-length = 79

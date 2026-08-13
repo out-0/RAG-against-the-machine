@@ -1,12 +1,12 @@
 def calculate_iou(chunk_a: tuple, chunk_b: tuple) -> float:
     """Calculates Intersection over Union for two character spans."""
 
-    start_max = max(chunk_a[0], chunk_b[0])  # Find where first chunk end
-    end_min = min(chunk_a[1], chunk_b[1])  # Find where second chunk start
+    start_max: int = max(chunk_a[0], chunk_b[0])  # Find where first chunk end
+    end_min: int = min(chunk_a[1], chunk_b[1])  # Find where second chunk start
     # First find the intersection (shared size between two area's)
-    intersection = max(0, end_min - start_max)
+    intersection: int = max(0, end_min - start_max)
     # Second find the Union (the full size of the two area's)
-    union = (
+    union: int = (
         (chunk_a[1] - chunk_a[0]) + (chunk_b[1] - chunk_b[0]) - intersection
     )
 

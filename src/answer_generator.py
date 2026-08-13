@@ -1,7 +1,6 @@
 import os
 from typing import Any
 
-import torch
 from huggingface_hub import logging
 from transformers import (
     AutoModelForCausalLM,
@@ -30,14 +29,10 @@ def load_model(model_name: str, cache_dir: str | None) -> tuple[Any, Any]:
     # Override default huggingface cache_dir if provided
     handle_cache_dir(cache_dir=cache_dir)
 
-    # Detect device
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
     # Load the model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(
-        pretrained_model_name_or_path=model_name,
+        pretrained_model_name_or_path=model_name
     )
-    model = model.to(device)
 
     tokenizer = AutoTokenizer.from_pretrained(
         pretrained_model_name_or_path=model_name

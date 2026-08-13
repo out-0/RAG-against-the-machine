@@ -170,7 +170,6 @@ def answer_dataset_endpoint(
     generator_model_name: str = "Qwen/Qwen3-0.6B",
     cache_dir: str | None = None,
     processed_path: str = "data/processed/",
-    save_path: str | None = None,
 ) -> StudentSearchResultsAndAnswer:
     return boss.answer_dataset(
         student_search_results_path=student_search_results_path,
@@ -178,7 +177,6 @@ def answer_dataset_endpoint(
         generator_model_name=generator_model_name,
         cache_dir=cache_dir,
         processed_path=processed_path,
-        save_path=save_path,
     )
 
 
