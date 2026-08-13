@@ -194,6 +194,8 @@ def search_batch(
     retriever: bm25s.BM25,
     chunks: list[Chunk],
     processed_path: str = "data/processed/",
+    use_hybrid: bool = False,
+    use_embedding: bool = False,
 ) -> list[list[Chunk]]:
     """
     Retreiving for batch of questions using the above search one,
@@ -215,6 +217,8 @@ def search_batch(
             retriever=retriever,
             chunks=chunks,
             processed_path=processed_path,
+            use_hybrid=use_hybrid,
+            use_embedding=use_embedding,
         )
         for query in queries
     ]

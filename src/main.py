@@ -38,6 +38,79 @@ class Boss:
     This is the main class of the program
     """
 
+    def usage(self) -> None:
+        """A quick usage guide"""
+
+        print_green("""
+        ██╗   ██╗███████╗ █████╗  ██████╗ ███████╗
+        ██║   ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝
+        ██║   ██║███████╗███████║██║  ███╗█████╗  
+        ██║   ██║╚════██║██╔══██║██║   ██║██╔══╝  
+        ╚██████╔╝███████║██║  ██║╚██████╔╝███████╗
+         ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+        """)
+
+        print("""
+        uv run python -m src.main search
+          --query "How to configure OpenAi server?"
+          --k 5
+          --processed_path data/processed/
+          --use_hybrid (optional)
+          --use_semantic (optional)
+
+        ###### Arguments:
+
+        - `--query`: The query to search for.
+        - `--k`: The number of top results to return.
+        - `--processed_path`: The path to read index from (index).
+        - `--use_hybrid`: Use hybrid retrieval (BM25 + semantic).
+        - `--use_semantic`: Use semantic retrieval (FAISS + sentence embeddings).
+
+        retun a list of chunks that are relevant to the query
+
+        #### Running a batch search
+
+        uv run python -m src.main search_dataset
+          --dataset_path data/datasets/UnansweredQuestions/dataset_code_public.json
+          --save_directory data/output/search_results
+          --processed_path data/processed/
+          --k 10
+
+        ###### Arguments:
+
+        - `--dataset_path`: The path to the dataset file.
+        - `--save_directory`: The directory to save the search results.
+        - `--processed_path`: The path to read index from (index).
+        - `--k`: The number of top results to return for each question.
+        - `--use_hybrid`: Use hybrid retrieval (BM25 + semantic).
+        - `--use_semantic`: Use semantic retrieval
+                            (FAISS + sentence embeddings)
+
+        retun a list of lists of chunks that are relevant to the query
+
+        #### Running answer and answer_dataset
+
+        uv run python -m src.main answer
+          --query "How to configure OpenAi server?"
+          --k 5
+          --generator_model Qwen3-0.6B
+          --cache_dir ... # optional to override default huggingface cache dir
+          --processed_path data/processed/
+          --
+
+        uv run python -m src.main answer_dataset
+          --student_search_results_path {path to search results}
+          --save_directory {path to save answers}
+
+        ###### Arguments:
+
+        - `student_search_results_path`
+        - `save_directory`
+        - `generator_model_name = "Qwen/Qwen3-0.6B"`
+        - `cache_dir`
+        - `processed_path`
+        """)
+
     def index(
         self,
         max_chunk_size: int = 2000,
@@ -164,6 +237,8 @@ class Boss:
         save_directory: str | None = None,
         processed_path: str = "data/processed/",
         save_file: str | None = None,
+        use_hybrid: bool = False,
+        use_embedding: bool = False,
     ) -> None:
         """ """
 
@@ -231,6 +306,8 @@ class Boss:
                 retriever=retriever,
                 chunks=chunks,
                 processed_path=processed_path,
+                use_hybrid=use_hybrid,
+                use_embedding=use_embedding,
             )
         except Exception as e:
             print_red(e)
@@ -290,6 +367,15 @@ class Boss:
         winning_chunks: list[Chunk] | None = None,
     ) -> MinimalAnswer:
         """Answer a single query using the retrieved context."""
+
+        print_green("""
+     █████╗ ███╗   ██╗███████╗██╗    ██╗███████╗██████╗ 
+    ██╔══██╗████╗  ██║██╔════╝██║    ██║██╔════╝██╔══██╗
+    ███████║██╔██╗ ██║███████╗██║ █╗ ██║█████╗  ██████╔╝
+    ██╔══██║██║╚██╗██║╚════██║██║███╗██║██╔══╝  ██╔══██╗
+    ██║  ██║██║ ╚████║███████║╚███╔███╔╝███████╗██║  ██║
+    ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝ ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝
+        """)
 
         # check if its called normally
         if cached_resources is None:
@@ -411,6 +497,15 @@ class Boss:
         processed_path: str = "data/processed/",
     ) -> StudentSearchResultsAndAnswer:
         """"""
+
+        print_green("""
+     █████╗ ███╗   ██╗███████╗██╗    ██╗███████╗██████╗ 
+    ██╔══██╗████╗  ██║██╔════╝██║    ██║██╔════╝██╔══██╗
+    ███████║██╔██╗ ██║███████╗██║ █╗ ██║█████╗  ██████╔╝
+    ██╔══██║██║╚██╗██║╚════██║██║███╗██║██╔══╝  ██╔══██╗
+    ██║  ██║██║ ╚████║███████║╚███╔███╔╝███████╗██║  ██║
+    ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝ ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝
+        """)
 
         try:
             # Load search results from dataset search stage

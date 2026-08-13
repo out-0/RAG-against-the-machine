@@ -3,9 +3,9 @@ from pathlib import Path
 
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 
+from src.custom_print import print_red
 from src.data_models import Chunk
 from src.docs_loading import Document
-from src.custom_print import print_red
 
 
 class Chunker:
@@ -64,8 +64,8 @@ class Chunker:
                 add_start_index=True,
             )
 
-        print_red("Warning: Somehow now files to get chunked")
-        return
+        print_red("Warning: File type is not supported.")
+        return None
 
     def process_files(self) -> list[Chunk]:
         """Processes all documents and outputs structured Chunk instances.
@@ -85,6 +85,8 @@ class Chunker:
 
             # Retrieve appropriate splitter & process document
             splitter = self._get_splitter_for_file(file_path)
+            if not splitter:
+                continue
             # Split the file
             lc_docs = splitter.create_documents(
                 texts=[content],
@@ -176,7 +178,6 @@ class Chunker:
 #                 node=node,
 #             )
 #
-#             # WARNING: I HOPE NOT FORGET
 #             # TODO: CURRENTLY IF THE NODE IS SMALL THAN THE MAX SIZE ITS WILL JUST CONSTRUCT ITS CHUNK
 #             # BUT ITS BETTER TO TRY ALSO TO CONCATINATE IT WITH THE NEXT NODE IF POSSIBLE SO WE AVOID
 #             # WASTING SOME SIZE OF CHUNK
