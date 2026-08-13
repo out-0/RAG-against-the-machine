@@ -1,7 +1,7 @@
 [project]
 name = "RAG-against-the-machine"
 version = "0.1.0"
-description = "RAG system" #TODO: Update later.
+description = "A retrieval-augmented generation (RAG) project designed to answer questions about a repository or documentation corpus"
 readme = "README.md"
 requires-python = ">=3.12.13" # The dataset we got is using some tricks that just allowed for >= 3.12
 dependencies = [
@@ -24,4 +24,9 @@ dependencies = [
 plugins = ["pydantic.mypy"]
 
 [tool.ruff]
-line-length = 80
+line-length = 79
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+docstring-code-line-length = 79

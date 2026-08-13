@@ -6,7 +6,9 @@ def calculate_iou(chunk_a: tuple, chunk_b: tuple) -> float:
     # First find the intersection (shared size between two area's)
     intersection = max(0, end_min - start_max)
     # Second find the Union (the full size of the two area's)
-    union = (chunk_a[1] - chunk_a[0]) + (chunk_b[1] - chunk_b[0]) - intersection
+    union = (
+        (chunk_a[1] - chunk_a[0]) + (chunk_b[1] - chunk_b[0]) - intersection
+    )
 
     # Protect again division by zero
     if union == 0:

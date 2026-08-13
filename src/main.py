@@ -44,8 +44,8 @@ class Boss:
         print_green("""
         ██╗   ██╗███████╗ █████╗  ██████╗ ███████╗
         ██║   ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝
-        ██║   ██║███████╗███████║██║  ███╗█████╗  
-        ██║   ██║╚════██║██╔══██║██║   ██║██╔══╝  
+        ██║   ██║███████╗███████║██║  ███╗█████╗
+        ██║   ██║╚════██║██╔══██║██║   ██║██╔══╝
         ╚██████╔╝███████║██║  ██║╚██████╔╝███████╗
          ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
         """)
@@ -64,14 +64,14 @@ class Boss:
         - `--k`: The number of top results to return.
         - `--processed_path`: The path to read index from (index).
         - `--use_hybrid`: Use hybrid retrieval (BM25 + semantic).
-        - `--use_semantic`: Use semantic retrieval (FAISS + sentence embeddings).
+        - `--use_semantic`: Use semantic retrieval (FAISS+sentence embeddings)
 
         retun a list of chunks that are relevant to the query
 
         #### Running a batch search
 
         uv run python -m src.main search_dataset
-          --dataset_path data/datasets/UnansweredQuestions/dataset_code_public.json
+          --dataset_path dataset_path.json
           --save_directory data/output/search_results
           --processed_path data/processed/
           --k 10
@@ -120,7 +120,20 @@ class Boss:
         use_embedding: bool = False,
         incremental: bool = False,
     ) -> None:
-        """ """
+        """Indexing operation that create a special map that link each
+        word to the relevant docs for it
+
+        Args:
+            - max_chunk_size (int): The maximum size of a chunk
+            - raw_path (str): The path to the raw files
+            - processed_path (str): The path to save the indexed lookup
+            - embedding_model_name (str): The name of the embeddings model
+            - use_embedding (bool): Whether to use embeddings
+            - incremental (bool): Whether to use incremental indexing
+
+        Returns:
+            - None
+        """
         print_green("""
     ██╗███╗   ██╗██████╗ ███████╗██╗  ██╗
     ██║████╗  ██║██╔══██╗██╔════╝╚██╗██╔╝
@@ -369,7 +382,7 @@ class Boss:
         """Answer a single query using the retrieved context."""
 
         print_green("""
-     █████╗ ███╗   ██╗███████╗██╗    ██╗███████╗██████╗ 
+     █████╗ ███╗   ██╗███████╗██╗    ██╗███████╗██████╗
     ██╔══██╗████╗  ██║██╔════╝██║    ██║██╔════╝██╔══██╗
     ███████║██╔██╗ ██║███████╗██║ █╗ ██║█████╗  ██████╔╝
     ██╔══██║██║╚██╗██║╚════██║██║███╗██║██╔══╝  ██╔══██╗
@@ -415,10 +428,11 @@ class Boss:
                 query=query,
             )
 
-            # tokenized_result currently consist of 'input_ids' and 'attention_mask'
-            # the mask is helpful later when processing a batch of input since
-            # the tokenized will apply a padding to match the length of each prompt
-            # int the batch so attention mask let the model know which token is real vs pad
+            # tokenized_result currently consist of 'input_ids' and
+            # 'attention_mask' the mask is helpful later when processing a
+            # batch of input since the tokenized will apply a padding to
+            # match the length of each prompt int the batch so attention
+            # mask let the model know which token is real vs pad
             tokenized_result = tokenizer.apply_chat_template(
                 conversation=messages,
                 tokenize=True,
@@ -499,7 +513,7 @@ class Boss:
         """"""
 
         print_green("""
-     █████╗ ███╗   ██╗███████╗██╗    ██╗███████╗██████╗ 
+     █████╗ ███╗   ██╗███████╗██╗    ██╗███████╗██████╗
     ██╔══██╗████╗  ██║██╔════╝██║    ██║██╔════╝██╔══██╗
     ███████║██╔██╗ ██║███████╗██║ █╗ ██║█████╗  ██████╔╝
     ██╔══██║██║╚██╗██║╚════██║██║███╗██║██╔══╝  ██╔══██╗
@@ -546,7 +560,8 @@ class Boss:
                 processed_path=processed_path,
             )
 
-            # Generate the answer for the current question using the winning chunks
+            # Generate the answer for the current question using
+            # the winning chunks
             answer_obj: MinimalAnswer = self.answer(
                 query=result["question"],
                 k=data["k"],

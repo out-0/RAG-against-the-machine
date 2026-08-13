@@ -53,9 +53,8 @@ def v_idx_build_and_save(
     print("\n===== State =====")
     print(f"Embedding model : {model_name}")
     print(
-        f"Max sequence    : {getattr(model, 'max_seq_length', 'unknown')} tokens"
+        f"Max sequence: {getattr(model, 'max_seq_length', 'unknown')} tokens"
     )
-
     print("Dataset:")
     print(f"    Average: {sum(token_lengths) / len(token_lengths):.1f}")
     print(f"    Max: {max(token_lengths)}")
@@ -63,7 +62,8 @@ def v_idx_build_and_save(
     print()
     if reducing_needed:
         print_yellow(
-            f"WARNING: Some chunks exceed the model's max sequence length of {getattr(model, 'max_seq_length', 'unknown')} tokens."
+            f"WARNING: Some chunks exceed the model's max sequence length "
+            f"of {getattr(model, 'max_seq_length', 'unknown')} tokens."
         )
         print_green("Recommendation:")
         print("  Reduce --max_chunk_size to around 900-1100 characters.")
@@ -116,13 +116,12 @@ def v_idx_search(
 ) -> list[tuple[Chunk, float]]:
     """Searches the FAISS index and returns list of (Chunk, score).
 
-    Scores are the raw distances returned by FAISS (inner product similarity for IndexFlatIP).
+    Scores are the raw distances returned
+    by FAISS (inner product similarity for IndexFlatIP).
     """
-    if index is None:
-        raise ValueError("Index not loaded!")
-
-    # Turn query into a 2d numpy array with shape [num_inputs, output_dimension]
-    query_vector = model.encode([query], convert_to_numpy=True)
+    # Turn query into a 2d numpy
+    # array with shape [num_inputs, output_dimension]
+    query_vector = model.encode(query, convert_to_numpy=True)
     query_vector = query_vector.astype("float32")
 
     # Search (Returns distances and IDs)

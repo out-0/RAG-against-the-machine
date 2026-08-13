@@ -1,20 +1,31 @@
 import os
 from typing import Any
 
+import torch
+from huggingface_hub import logging
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
 )
 
 from src.data_models import Chunk
-import torch
 
-from huggingface_hub import logging
 
 def load_model(model_name: str, cache_dir: str | None) -> tuple[Any, Any]:
-    """"""
+    """
+    Load the model and tokenizer, also override huggingface cache dir
 
-    logging.set_verbosity_error() # Turn off the huggingface unauthenticated warning
+    Args:
+        - model_name (str): The name of the model
+        - cache_dir (str): The path to the cache dir
+
+    Returns:
+        - model (Any): The model
+        - tokenizer (Any): The tokenizer
+    """
+
+    # Turn off the huggingface unauthenticated warning
+    logging.set_verbosity_error()
 
     # Override default huggingface cache_dir if provided
     handle_cache_dir(cache_dir=cache_dir)
@@ -58,8 +69,11 @@ def get_chat_template(
     require some slit different template
 
     Args:
+        - chunks (list[Chunk]): The list of chunks
+        - query (str): The query
 
     Returns:
+        - list[dict[str, str]]: The chat template
 
     """
 
@@ -71,7 +85,10 @@ def get_chat_template(
     messages: list[dict[str, str]] = [
         {
             "role": "system",
-            "content": "Answer the question using only the provided context. If the context doesn't contain the answer, say so.",
+            "content": (
+                "Answer the question using only the provided context."
+                "If the context doesn't contain the answer, say so."
+            ),
         },
         {
             "role": "user",

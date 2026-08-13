@@ -77,7 +77,8 @@ def search_one(
         return results
 
     def GetSemantic_result() -> list[tuple[Chunk, float]]:
-        """Get semantic (embedding) result using FAISS index and sentence-transformers."""
+        """Get semantic (embedding) result using FAISS index
+        and sentence-transformers."""
         # load index file saved under processed_path/index.faiss
         index_file = Path(processed_path) / "index.faiss"
         if not index_file.exists():
@@ -124,7 +125,8 @@ def search_one(
         combined_scores: dict[int, float] = {}
         id_to_chunk: dict[int, Chunk] = {}
 
-        # For each chunk we callculate a score based on its rank in both results and sum them up
+        # For each chunk we callculate a score based on its
+        # rank in both results and sum them up
         for rank, (chunk, _) in enumerate(bm25_results):
             combined_scores[chunk.id] = combined_scores.get(
                 chunk.id, 0.0

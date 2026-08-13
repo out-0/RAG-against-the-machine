@@ -2,16 +2,26 @@ from pathlib import Path
 
 
 class Document:
-    """"""
+    """
+    A class that represent a document
+    """
 
     def __init__(self, path: str, content: str, extension: str) -> None:
-        """"""
+        """
+        Constructor
+        Args:
+            - path (str): The path to the document
+            - content (str): The content of the document
+            - extension (str): The extension of the document
+        """
         self.path: str = path
         self.content: str = content
         self.extension: str = extension
 
     def __repr__(self) -> str:
-        """"""
+        """
+        Return a string representation of the document
+        """
         return (
             f"\nDocument:\n"
             f"        path={self.path}\n"
@@ -50,15 +60,16 @@ def load_files(input_path: str) -> list[Document]:
 
     elif path.is_dir():
         try:
-            for path in path.rglob("*"):
-                if path.suffix in extensions:
-                    file_content = path.read_text(encoding="utf-8", errors="ignore")
+            for p in path.rglob("*"):
+                if p.suffix in extensions:
+                    file_content = p.read_text(
+                        encoding="utf-8", errors="ignore"
+                    )
                     docs_list.append(
                         Document(
-                            # the above 'path' is pathlib.PosixPath so i got it to str
-                            path=str(path),
+                            path=str(p),
                             content=file_content,
-                            extension=path.suffix,
+                            extension=p.suffix,
                         )
                     )
         except Exception:

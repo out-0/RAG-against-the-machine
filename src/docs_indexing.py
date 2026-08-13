@@ -23,8 +23,6 @@ import threading
 from pathlib import Path
 
 import bm25s
-from sentence_transformers import SentenceTransformer
-from sentence_transformers.util import semantic_search
 
 from src.custom_print import print_green, print_red, print_yellow
 from src.data_models import Chunk
@@ -38,11 +36,20 @@ def indexing(
     embeddings_model_name: str | None = "all-MiniLM-L6-v2",
     use_hybrid: bool = False,
 ) -> None:
-    """Run the indexer based on the indexing method specified by args
-    if not specified, the default is bm25 which is implemented by
-    bm25s library
+    """
+    Indexing which create a special map that link each
+    word to the relevant docs for it after scoring it by a
+    some formula's based on the indexing method,
 
-    if hypbrid we just run both (keyword | embeddings) indexing
+    Args:
+        - chunks (list[Chunk]): The list of chunks
+        - processed_path (str): The path to save the indexed lookup
+        - use_embedding (bool): Whether to use embeddings
+        - embeddings_model_name (str): The name of the embeddings model
+        - use_hybrid (bool): Whether to use hybrid indexing
+
+    Returns:
+        - None
     """
 
     if not chunks:
@@ -57,7 +64,10 @@ def indexing(
     # Splite keyword indexing and embeddings to use them as threads
 
     def keyword_indexing(docs: list[str]) -> None:
-        """"""
+        """
+        Create a special map that link each word to the relevant docs for it
+        by bm25
+        """
         corpus_tokens: list[list[str]] | bm25s.tokenization.Tokenized = (
             bm25s.tokenize(texts=docs, show_progress=True)
         )
@@ -76,12 +86,15 @@ def indexing(
     def semantic_indexing(
         embeddings_model_name: str,
         processed_path: str,
-        docs: list[str],
     ) -> None:
-        """"""
+        """
+        Create a special map that link each word to the relevant docs for it
+        by embeddings
+        """
         if embeddings_model_name != "all-MiniLM-L6-v2":
             print_yellow(
-                "WARNING: Currently only 'all-MiniLM-L6-v2' is supported for embedding"
+                "WARNING: Currently only 'all-MiniLM-L6-v2' "
+                "is supported for embedding"
             )
             print_yellow("Fallback to default 'all-MiniLM-L6-v2'")
             embeddings_model_name = "all-MiniLM-L6-v2"
@@ -114,7 +127,6 @@ def indexing(
             semantic_indexing(
                 embeddings_model_name=embeddings_model_name,
                 processed_path=processed_path,
-                docs=docs,
             )
 
         # Should not triggered
@@ -127,118 +139,3 @@ def indexing(
     with open(Path(processed_path) / "chunks.pkl", "wb") as f:
         pickle.dump(chunks, f)
         # print("Chunks saved as pickle file for later mapping to results")
-
-
-# class Tf_idf_search:
-#     """Term Frequency-Inverse Document Frequency
-#         A simple algo that measures how often a word appears in a document.
-#         A higher frequency suggests greater importance.
-#         If a term appears frequently in a document, it is likely relevant
-#         to the document’s content.
-#
-#     Formula is:
-#         TF(t,d) =   number of times term appears in document /
-#                     total number of words in document
-#
-#         IDF(t,D) = log(Total documents count / Documents have the term)
-#
-#     The more a word appears in a single document,
-#     the more important that word is for that document,
-#     the more it appears in the corpus then the less
-#     important that word is overall.
-#     """
-#
-#     def __init__(self, chunks: list[Chunk]) -> None:
-#         """"""
-#         self.chunks: list[Chunk] = chunks
-#
-#         documents: list[str] = [chunk.content for chunk in self.chunks]
-#
-#         self.vectorizer = TfidfVectorizer()
-#         self.tf_idf_matrix = self.vectorizer.fit_transform(self.documents)
-#
-#         self.cleaner_docs: dict[Chunk, list[str]] = self._cleaning_chunks(docs=chunks)
-#
-#     def run(self, query: str) -> None:
-#         """"""
-#         pass
-#
-#     def _cleaning_chunks(self, docs: list[Chunk]) -> dict[Chunk, list[str]]:
-#         """
-#         Cleaning the docs by removing punctuations and tokenize them into words
-#         for simpler processing later,
-#
-#         Args:
-#             - docs: list of documents you'll process
-#         Returns:
-#             - list of the tokenized words for each doc
-#         """
-#         cleaner_map: dict[Chunk, list[str]] = {}
-#
-#         import re
-#
-#         for doc in docs:
-#             tokens: list[str]
-#
-#             normalized = re.sub(r"[^\w\s]", "", doc.content)
-#             tokens = normalized.lower().split()
-#
-#             cleaner_map[doc] = tokens
-#
-#         return cleaner_map
-#
-#     def term_frequency(self, term: str, document_words: list[str]) -> float:
-#         """"""
-#         tokens: list[str] = document_words
-#         if not tokens:
-#             return 0.0
-#         return tokens.count(term) / len(tokens)
-#
-#     def inverse_document_frequency(self, term: str) -> float:
-#         """"""
-#         count_of_documents: float = len(self.cleaner_docs) + 1
-#         count_of_documents_with_term: float = (
-#             sum([1 for doc in self.cleaner_docs if term in self.cleaner_docs[doc]]) + 1
-#         )
-#         idf: float = math.log10(count_of_documents / count_of_documents_with_term) + 1
-#         return idf
-#
-#     def score_document(self, query: str, document_words: list[str]) -> float:
-#         """"""
-#         quwery_words: list[str] = query.lower().split()
-#         score: float = 0.0
-#
-#         for term in quwery_words:
-#             tf: float = self.term_frequency(term, document_words)
-#             idf: float = self.inverse_document_frequency(term=term)
-#
-#             score += tf * idf
-#
-#         return score
-#
-#     def search(self, query: str, top_k: int) -> list[tuple[Chunk, float]]:
-#         """Search for a query again the docs available and return
-#         top k docs after sorting them based on the score gained
-#         from the tf-idf process
-#
-#         Args:
-#             - query: user question
-#             - tok_k: limit of docs you want to return
-#
-#         Returns:
-#             list of top k documents
-#         """
-#         results: list[tuple[Chunk, float]] = []
-#
-#         for doc in self.cleaner_docs:
-#             score: float = self.score_document(query, self.cleaner_docs[doc])
-#             if score > 0:
-#                 results.append((doc, score))
-#
-#         # Sort by score in descending order (highest score first)
-#         results.sort(key=lambda x: x[1], reverse=True)
-#         if top_k > len(results):
-#             raise ValueError(
-#                 "Warrning: Not enough docs to be returned", "try smaller top_k"
-#             )
-#         return results[:top_k]

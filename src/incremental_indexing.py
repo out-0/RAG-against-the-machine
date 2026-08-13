@@ -22,9 +22,9 @@ def handle_incremental_indexing(
 ) -> None:
     """Perform incremental indexing based on per-file content hashes.
 
-    Changed or newly added files are re-chunked and re-embedded. Deleted files are
-    removed from the FAISS and chunk store. BM25 is rebuilt from the updated chunk
-    set on every incremental run.
+    Changed or newly added files are re-chunked and re-embedded.
+    Deleted files are removed from the FAISS and chunk store.
+    BM25 is rebuilt from the updated chunk set on every incremental run.
     """
     processed_dir = Path(processed_path)
     processed_dir.mkdir(parents=True, exist_ok=True)
@@ -66,7 +66,8 @@ def handle_incremental_indexing(
     index_path = processed_dir / "index.faiss"
     if not chunks_path.exists():
         print(
-            "Existing chunk metadata is missing. Falling back to full indexing."
+            "Existing chunk metadata is missing. "
+            "Falling back to full indexing."
         )
         full_index(
             docs,
@@ -80,12 +81,12 @@ def handle_incremental_indexing(
     with open(chunks_path, "rb") as f:
         chunks: list[Chunk] = pickle.load(f)
 
-    index = None
-    # Load the FAISS index with safety fallback if somehow index files is missing
+    # Load the FAISS index with safety fallback if somehow index is missing
     if use_embedding:
         if not index_path.exists():
             print(
-                "Existing FAISS index is missing. Falling back to full indexing."
+                "Existing FAISS index is missing. "
+                "Falling back to full indexing."
             )
             full_index(
                 docs,
@@ -110,18 +111,21 @@ def handle_incremental_indexing(
     # Remove affected chunks from vector index
     if removed_chunk_ids:
         if use_embedding:
-            index.remove_ids(np.array(list(removed_chunk_ids), dtype=np.int64))
+            selector = faiss.IDSelectorBatch(
+                np.array(list(removed_chunk_ids), dtype=np.int64)
+            )
+            index.remove_ids(selector)
         # Collect not removed chunks to be used below
-        chunks = [chunk for chunk in chunks if chunk.id not in removed_chunk_ids]
+        chunks = [
+            chunk for chunk in chunks if chunk.id not in removed_chunk_ids
+        ]
 
     # Process changed files only and re-add their embedding vectors.
     if changed_files:
-
         # Get the last know idx so new chunks can be assigned next unique ids
         next_id = max((chunk.id for chunk in chunks), default=0) + 1
 
         # Initialize embedding model
-        embedding_model = None
         if use_embedding:
             embedding_model = SentenceTransformer(
                 embeddings_model_name or "all-MiniLM-L6-v2"
