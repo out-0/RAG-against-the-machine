@@ -1,17 +1,15 @@
 run:
-	...
+	uv run python3 -m src usage
 
 install:
-	...
+	@uv venv
+	@uv sync
 
-index:
-	uv run python3 -m src index
-
-search:
-	uv run python3 -m src
+debug:
+	uv run python3 -m pdb -m src
 
 lint:
-	flake8 .
+	flake8 --extend-exclude .venv,data/  .
 	mypy . \
 	--warn-return-any \
 	--warn-unused-ignores \
