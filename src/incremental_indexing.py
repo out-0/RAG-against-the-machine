@@ -59,7 +59,7 @@ def handle_incremental_indexing(
 
     # No changes detected
     if not changed_files and not deleted_paths:
-        print("No changes detected.")
+        print("No changes detected. Skipping indexing.")
         return
 
     chunks_path = processed_dir / "chunks.pkl"
@@ -82,6 +82,7 @@ def handle_incremental_indexing(
         chunks: list[Chunk] = pickle.load(f)
 
     # Load the FAISS index with safety fallback if somehow index is missing
+    index = None
     if use_embedding:
         if not index_path.exists():
             print(
@@ -114,6 +115,7 @@ def handle_incremental_indexing(
             selector = faiss.IDSelectorBatch(
                 np.array(list(removed_chunk_ids), dtype=np.int64)
             )
+            assert index is not None
             index.remove_ids(selector)
         # Collect not removed chunks to be used below
         chunks = [
@@ -149,6 +151,7 @@ def handle_incremental_indexing(
                 new_ids = np.array(
                     [chunk.id for chunk in new_chunks], dtype=np.int64
                 )
+                assert index is not None
                 # Add new embeddings to vector index in memory
                 index.add_with_ids(new_embeddings, new_ids)
             # Append new chunks so all chunks can be used below for BM25
@@ -175,6 +178,18 @@ def full_index(
     use_embedding: bool,
     embeddings_model_name: str | None,
 ) -> None:
+    """Wrapper for full indexing process and hashing documents
+
+    Args:
+        - docs (list): The list of documents
+        - processed_path (str): The path to save the indexed lookup
+        - max_chunk_size (int): The maximum chunk size
+        - use_embedding (bool): Whether to use embeddings
+        - embeddings_model_name (str): The name of the embeddings model
+
+    Returns:
+        - None
+    """
     chunker = Chunker(files=docs, max_size=max_chunk_size)
     chunks: list[Chunk] = chunker.process_files()
     indexing(
@@ -187,6 +202,8 @@ def full_index(
 
 
 def rerun_bm25_indexing(chunks: list[Chunk], processed_path: str) -> None:
+    """Wrapper for bm25 indexing process"""
+
     corpus_tokens = bm25s.tokenize(
         texts=[chunk.content for chunk in chunks], show_progress=True
     )
@@ -197,6 +214,7 @@ def rerun_bm25_indexing(chunks: list[Chunk], processed_path: str) -> None:
 
 # To hash documents content
 def generate_hash(text: str) -> str:
+    """Generate hash for document content"""
     return hashlib.md5(text.encode()).hexdigest()
 
 

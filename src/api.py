@@ -13,7 +13,7 @@ boss = Boss()
 
 @app.get("/")
 def home() -> dict:
-    # TODO: COMPLETING THIS MESSAGE
+    """Endpoint action for home operation"""
     message: dict = {
         "message": "Hello, you can use the next entrypoints",
         "entries": {
@@ -112,7 +112,7 @@ def search_endpoint(
     use_hybrid: bool = False,
     use_embedding: bool = False,
 ) -> MinimalSearchResults | list[str]:
-    """"""
+    """Endpoint action for search operation"""
     return boss.search(
         query=query,
         k=k,
@@ -131,6 +131,7 @@ def search_dataset_endpoint(
     processed_path: str = "data/processed/",
     save_file: str | None = None,
 ) -> dict:
+    """Endpoint action for search operation"""
     boss.search_dataset(
         dataset_path=dataset_path,
         k=k,
@@ -152,6 +153,7 @@ def answer_endpoint(
     question_id: str | int = "0",
     save_path: str | None = None,
 ) -> MinimalAnswer:
+    """Endpoint action for answer operation"""
     return boss.answer(
         query=query,
         k=k,
@@ -171,6 +173,7 @@ def answer_dataset_endpoint(
     cache_dir: str | None = None,
     processed_path: str = "data/processed/",
 ) -> StudentSearchResultsAndAnswer:
+    """Endpoint action for answer operation"""
     return boss.answer_dataset(
         student_search_results_path=student_search_results_path,
         save_directory=save_directory,
@@ -186,6 +189,7 @@ def evaluate_endpoint(
     dataset_path: str,
     k: int,
 ) -> dict:
+    """Endpoint action for evaluate operation"""
     result: dict = boss.evaluate(
         student_search_results_path=student_search_results_path,
         dataset_path=dataset_path,

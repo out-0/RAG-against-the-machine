@@ -1,4 +1,3 @@
-# TODO: IMPLEMENT DOCSTRINGS LATER
 import json
 import sys
 from pathlib import Path
@@ -114,7 +113,7 @@ class Boss:
     def index(
         self,
         max_chunk_size: int = 2000,
-        raw_path: str = "data/raw/vllm-0.10.1",
+        raw_path: str | None = None,
         processed_path: str = "data/processed/",
         embedding_model_name: str | None = "all-MiniLM-L6-v2",
         use_embedding: bool = False,
@@ -144,6 +143,10 @@ class Boss:
         """)
 
         try:
+            if not raw_path:
+                raise ValueError(
+                    "Please provide a valid path to the raw files"
+                )
             # Load the files into program
             docs: list[Document] = load_files(input_path=raw_path)
 
@@ -178,11 +181,24 @@ class Boss:
         query: str,
         k: int = 1,
         processed_path: str = "data/processed/",
-        question_id: str = "0",
+        question_id: str = "0",  # just optional
         use_hybrid: bool = False,
         use_embedding: bool = False,
     ) -> MinimalSearchResults | list[str]:
-        """"""
+        """Search operation that return a list of chunks
+        that are relevant to the query
+
+        Args:
+            - query (str): The query to search for
+            - k (int): The number of top results to return
+            - processed_path (str): The path to the processed files
+            - question_id (str): The id of the question
+            - use_hybrid (bool): Use hybrid search or not
+            - use_embedding (bool): Use embedding search or not
+
+        Returns:
+            - A list of chunks that are relevant to the query
+        """
 
         print_green("""
     ███████╗███████╗ █████╗ ██████╗  ██████╗██╗  ██╗
@@ -393,7 +409,22 @@ class Boss:
         cached_resources: CachedResources | None = None,
         winning_chunks: list[Chunk] | None = None,
     ) -> MinimalAnswer:
-        """Answer a single query using the retrieved context."""
+        """Answer a single query using the retrieved context.
+
+        Args:
+            - query (str): The query to answer.
+            - k (int): The number of chunks to retrieve.
+            - generator_model_name (str): The name of the generator model.
+            - cache_dir (str | None): The cache directory.
+            - processed_path (str): The path to the processed files.
+            - question_id (str | int): The question id.
+            - save_path (str | None): The path to save the answer.
+            - cached_resources (CachedResources | None): The cached resources.
+            - winning_chunks (list[Chunk] | None): The winning chunks.
+
+        Returns:
+            - MinimalAnswer: The answer.
+        """
 
         print_green("""
      █████╗ ███╗   ██╗███████╗██╗    ██╗███████╗██████╗
@@ -514,6 +545,7 @@ class Boss:
         if save_path is not None:
             save_to_json_file(file_path=save_path, obj=min_answer)
 
+        print_green(min_answer.answer)
         return min_answer
 
     def answer_dataset(
@@ -524,7 +556,18 @@ class Boss:
         cache_dir: str | None = None,
         processed_path: str = "data/processed/",
     ) -> StudentSearchResultsAndAnswer:
-        """"""
+        """
+
+        Args:
+            student_search_results_path: The path to student's search results.
+            save_directory (str): The directory to save the answers.
+            generator_model_name: The name of the generator model.
+            cache_dir: The cache directory. Defaults to None.
+            processed_path: The path to the processed data.
+
+        Returns:
+            StudentSearchResultsAndAnswer
+        """
 
         print_green("""
      █████╗ ███╗   ██╗███████╗██╗    ██╗███████╗██████╗
@@ -542,7 +585,7 @@ class Boss:
 
             print(f"Loaded {data['search_results']} questions")
         except Exception as e:
-            print_red(e.args[0])
+            print_red(e)
             sys.exit(1)
 
         # Load the model
@@ -732,5 +775,7 @@ class Boss:
 
 
 def main() -> None:
-    """"""
+    """
+    The main entry point for the application.
+    """
     fire.Fire(component=Boss)
