@@ -23,10 +23,14 @@ import threading
 from pathlib import Path
 
 import bm25s
+from huggingface_hub import logging
 
 from src.custom_print import print_green, print_red, print_yellow
 from src.data_models import Chunk
 from src.vector_idx import v_idx_build_and_save
+
+# Turn off the huggingface unauthenticated warning
+logging.set_verbosity_error()
 
 
 def indexing(
@@ -110,7 +114,7 @@ def indexing(
         t1 = threading.Thread(target=keyword_indexing, args=(docs,))
         t2 = threading.Thread(
             target=semantic_indexing,
-            args=(embeddings_model_name, processed_path, docs),
+            args=(embeddings_model_name, processed_path),
         )
         t1.start()
         t2.start()

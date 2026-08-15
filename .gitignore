@@ -8,4 +8,7 @@ src/__pycache__
 .ruff_cache/*
 .venv
 .vscode
-
+data/raw/
+data/processed/
+data/output/
+data/datasets/

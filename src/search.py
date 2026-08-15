@@ -82,7 +82,10 @@ def search_one(
         # load index file saved under processed_path/index.faiss
         index_file = Path(processed_path) / "index.faiss"
         if not index_file.exists():
-            raise FileNotFoundError(f"FAISS index not found at {index_file}")
+            raise FileNotFoundError(
+                f"FAISS index not found at {index_file}\n"
+                "run indexing with FAISS embedding first"
+            )
 
         index = v_idx_load(str(index_file))
         model_name = embeddings_model_name or "all-MiniLM-L6-v2"

@@ -113,7 +113,7 @@ class Boss:
     def index(
         self,
         max_chunk_size: int = 2000,
-        raw_path: str | None = None,
+        raw_path: str = "data/raw/vllm-0.10.1",
         processed_path: str = "data/processed/",
         embedding_model_name: str | None = "all-MiniLM-L6-v2",
         use_embedding: bool = False,
@@ -143,12 +143,19 @@ class Boss:
         """)
 
         try:
-            if not raw_path:
-                raise ValueError(
-                    "Please provide a valid path to the raw files"
-                )
+            # if not raw_path:
+            #     raise ValueError(
+            #         "Please provide a valid path to the raw files"
+            #     )
+
             # Load the files into program
             docs: list[Document] = load_files(input_path=raw_path)
+
+            if not docs:
+                raise ValueError(
+                    "Warning: No files found\n"
+                    "Make sure the raw files path is correct"
+                )
 
             # Handle incremental indexing if enabled
             if incremental:
@@ -221,15 +228,19 @@ class Boss:
         # << Load the retriever AND Chunks that was pickled >>
         retriever, chunks = load_retriever(processed_path)
         # Retrieve results for one question
-        retrieve_results: list[Chunk] = search_one(
-            query=query,
-            k=k,
-            retriever=retriever,
-            chunks=chunks,
-            use_hybrid=use_hybrid,
-            processed_path=processed_path,
-            use_embedding=use_embedding,
-        )
+        try:
+            retrieve_results: list[Chunk] = search_one(
+                query=query,
+                k=k,
+                retriever=retriever,
+                chunks=chunks,
+                use_hybrid=use_hybrid,
+                processed_path=processed_path,
+                use_embedding=use_embedding,
+            )
+        except Exception as e:
+            print(f"{type(e).__name__}: {e}")
+            sys.exit()
 
         # Build Minimal search result to be returned and used later in answers
         min_search_result: MinimalSearchResults = MinimalSearchResults(
@@ -257,6 +268,8 @@ class Boss:
             min_search_result.retrieved_sources.append(min_source)
 
         # return min_search_result
+
+        # Return the path of the sources to match the demo format
         return sources_path_results
 
     def search_dataset(
@@ -583,7 +596,7 @@ class Boss:
             with open(student_search_results_path, "r") as f:
                 data: dict = json.load(f)
 
-            print(f"Loaded {data['search_results']} questions")
+            print(f"Loaded {len(data['search_results'])} questions")
         except Exception as e:
             print_red(e)
             sys.exit(1)
@@ -609,6 +622,14 @@ class Boss:
         for result in tqdm.tqdm(data["search_results"]):
             # Get the winning chunks for the current question
             # To be used in answer below
+            # note: its better to note reseach here and just relay
+            # on search operation but the result from Minimal source
+            # in search_dataset is just holding the file_path,
+            # and index's, so its either reconstruct the chunk based
+            # on its metadata or just research which the one i went
+            # with, there is other option like shove the chunk also
+            # as metadata but its will require some quick changes
+            # which probably will introduce some new issue, also am lazy.
             winning_chunks = search_one(
                 query=result["question"],
                 k=data["k"],
@@ -632,7 +653,8 @@ class Boss:
         # Save the result
         search_result_path = Path(student_search_results_path)
         file_name = search_result_path.name
-        save_path = search_result_path.parent / file_name
+        save_path = Path(save_directory) / file_name
+        save_path.parent.mkdir(parents=True, exist_ok=True)
         save_to_json_file(file_path=save_path, obj=final_boss)
         print_green(
             f"Saved student_search_results_and_answer "
