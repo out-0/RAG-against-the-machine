@@ -127,6 +127,17 @@ uv run python -m src.main answer_dataset \
 - `cache_dir`
 - `processed_path`
 
+*Qwen3-0.6B has the following features*:
+
+    Type: Causal Language Models
+    Training Stage: Pretraining & Post-training
+    Number of Parameters: 0.6B
+    Number of Paramaters (Non-Embedding): 0.44B
+    Number of Layers: 28
+    Number of Attention Heads (GQA): 16 for Q and 8 for KV
+    Context Length: 32,768
+
+
 #### Evaluation
 
 **You can check the evaluation results with a quick light metrix by
@@ -143,6 +154,10 @@ uv run python -m src.main evaluate \
 **Also you can run the full pipeline py a quick API***
 
 ### Running the API
+
+```bash
+sudo uv run fastapi dev src/api.py
+```
 
 ```bash
 uv run uvicorn src.api:app --reload

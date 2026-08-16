@@ -121,7 +121,7 @@ def v_idx_search(
     """
     # Turn query into a 2d numpy
     # array with shape [num_inputs, output_dimension]
-    query_vector = model.encode(query, convert_to_numpy=True)
+    query_vector = model.encode([query], convert_to_numpy=True)
     query_vector = query_vector.astype("float32")
 
     # Search (Returns distances and IDs)

@@ -7,7 +7,7 @@ from bm25s.tokenization import Tokenized
 from pydantic_core import PydanticSerializationError
 from sentence_transformers import SentenceTransformer
 
-from src.custom_print import print_red
+from src.custom_print import print_green, print_red
 from src.data_models import (
     Chunk,
     MinimalAnswer,
@@ -108,6 +108,7 @@ def search_one(
             processed_path=processed_path,
         )
         if result is not None:
+            print_green("cached query used")
             return result
         bm25_results = GetKeywordMatching_result()
         embed_results = GetSemantic_result()
@@ -154,6 +155,7 @@ def search_one(
             result=ranked_chunks,
             processed_path=processed_path,
         )
+        print_green("Hybrid search used")
         return ranked_chunks
 
     elif use_embedding:

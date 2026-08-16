@@ -260,10 +260,12 @@ class Boss:
                 first_character_index=chunk.start_index,
                 last_character_index=chunk.end_index,
             )
+
+            file_path: str = min_source.file_path
+            first_index: int = min_source.first_character_index
+            last_index: int = min_source.last_character_index
             sources_path_results.append(
-                f"{min_source.file_path} [{min_source.first_character_index}:{
-                    min_source.last_character_index
-                }]"
+                f"{file_path} [{first_index}:{last_index}]"
             )
             min_search_result.retrieved_sources.append(min_source)
 
@@ -506,7 +508,7 @@ class Boss:
         # Generate the model response
         generated_ids = model.generate(
             **tokenized_result,
-            max_new_tokens=1024,
+            max_new_tokens=2048,
         )
 
         # Strip out the initial prompt from the generated result
