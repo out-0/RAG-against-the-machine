@@ -8,3 +8,6 @@ src/__pycache__
 .ruff_cache/*
 .venv
 .vscode
+data/raw/
+vllm*/
+moulinette*
