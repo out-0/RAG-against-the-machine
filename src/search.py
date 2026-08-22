@@ -160,38 +160,38 @@ def search_one(
 
     elif use_embedding:
         # check if query already cached return the cached result
-        result = check_if_query_cached(
-            query=query,
-            processed_path=processed_path,
-        )
-        if result is not None:
-            return result
+        # result = check_if_query_cached(
+        #     query=query,
+        #     processed_path=processed_path,
+        # )
+        # if result is not None:
+        #     return result
         embed_result = GetSemantic_result()
         ranked_chunks = [chunk for chunk, _ in embed_result][:k]
         # save query result before returning
-        save_query_result(
-            query=query,
-            result=ranked_chunks,
-            processed_path=processed_path,
-        )
+        # save_query_result(
+        #     query=query,
+        #     result=ranked_chunks,
+        #     processed_path=processed_path,
+        # )
         return ranked_chunks
 
     else:
         # check if query already cached return the cached result
-        result = check_if_query_cached(
-            query=query,
-            processed_path=processed_path,
-        )
-        if result is not None:
-            return result
+        # result = check_if_query_cached(
+        #     query=query,
+        #     processed_path=processed_path,
+        # )
+        # if result is not None:
+        #     return result
         bm25_results = GetKeywordMatching_result()
         ranked_chunks = [chunk for chunk, _ in bm25_results][:k]
-        # save query result before returning
-        save_query_result(
-            query=query,
-            result=ranked_chunks,
-            processed_path=processed_path,
-        )
+        # # save query result before returning
+        # save_query_result(
+        #     query=query,
+        #     result=ranked_chunks,
+        #     processed_path=processed_path,
+        # )
         return ranked_chunks
 
 
