@@ -11,3 +11,4 @@ src/__pycache__
 data/raw/
 vllm*/
 moulinette*
+data/indexes/*

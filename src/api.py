@@ -1,5 +1,16 @@
-from fastapi import FastAPI
+import os
+import re
+import subprocess
+import tempfile
+from html import escape
+from pathlib import Path
+from string import Template
+from urllib.parse import urlparse
 
+from fastapi import FastAPI, Form, HTTPException
+from fastapi.responses import HTMLResponse
+
+from src.answer_generator import load_model
 from src.data_models import (
     MinimalAnswer,
     MinimalSearchResults,
@@ -7,11 +18,277 @@ from src.data_models import (
 )
 from src.main import Boss
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORIES_PATH = PROJECT_ROOT / "data" / "indexes"
+PROMPT_PAGE_PATH = PROJECT_ROOT / "prompt.html"
+ANSWER_PAGE_PATH = PROJECT_ROOT / "answer.html"
+INDEX_PAGE = PROJECT_ROOT / "index.html"
+
 app = FastAPI()
 boss = Boss()
+model, tokenizer = load_model()
+
+# TODO: LATER AFTER ANDSWERING BY LEXICAL, ASK FOR USER SATIFACTION AND PROVIDE
+# OPTION FOR USING EMBEDDING MODEL FOR SEMANTIC INDEXING
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
+def home_ui():
+    return (INDEX_PAGE).read_text(encoding="utf-8")
+
+
+@app.post("/process-repo")
+def process_repo(repo_link: str = Form(...)):
+    repo_url, owner, repository = _parse_github_repo(repo_link)
+    repo_path = REPOSITORIES_PATH / owner / repository
+    resolved_repo_root = REPOSITORIES_PATH.resolve()
+    if not repo_path.resolve().is_relative_to(resolved_repo_root):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The repository path resolves outside the local clone area."
+            ),
+        )
+
+    if repo_path.exists():
+        if not (repo_path / ".git").is_dir():
+            raise HTTPException(
+                status_code=409,
+                detail="A non-repository already exists at the clone path.",
+            )
+        try:
+            remote = subprocess.run(
+                ["git", "-C", str(repo_path), "remote", "get-url", "origin"],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not verify the existing local repository.",
+            ) from exc
+        if remote.returncode != 0 or remote.stdout.strip().removesuffix(
+            ".git"
+        ) != repo_url.removesuffix(".git"):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The existing local repository does not match this URL."
+                ),
+            )
+    else:
+        with tempfile.TemporaryDirectory(
+            prefix=".clone-", dir=PROJECT_ROOT
+        ) as temporary_directory:
+            temporary_repo_path = Path(temporary_directory) / "repository"
+            _clone_repository(repo_url, temporary_repo_path)
+            repo_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                temporary_repo_path.rename(repo_path)
+            except FileExistsError:
+                if not (repo_path / ".git").is_dir():
+                    raise HTTPException(
+                        status_code=409,
+                        detail="A repository appeared at the clone path.",
+                    )
+
+    processed_path = PROJECT_ROOT / "data" / "indexes" / owner / repository
+    try:
+        index_endpoint(
+            raw_path=str(repo_path),
+            processed_path=str(processed_path),
+        )
+    except SystemExit as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="The repository was cloned, but indexing failed.",
+        ) from exc
+
+    if not (processed_path / "chunks.pkl").is_file():
+        raise HTTPException(
+            status_code=500,
+            detail="Indexing did not produce the expected chunk data.",
+        )
+
+    prompt_page = PROMPT_PAGE_PATH.read_text(encoding="utf-8")
+    prompt_page = Template(prompt_page).substitute(
+        owner=escape(owner),
+        repository=escape(repository),
+    )
+    return HTMLResponse(prompt_page)
+
+
+@app.post("/ask", response_class=HTMLResponse)
+def ask_repository(
+    query: str = Form(...),
+    owner: str = Form(...),
+    repository: str = Form(...),
+) -> HTMLResponse:
+    query = query.strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="Enter a question.")
+    valid_owner = re.fullmatch(r"[A-Za-z0-9_-]+", owner) is not None
+    valid_repository = re.fullmatch(
+        r"[A-Za-z0-9_.-]+", repository
+    ) is not None
+    if (
+        not valid_owner
+        or not valid_repository
+        or repository in {".", ".."}
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="The repository identifier is invalid.",
+        )
+
+    processed_path = REPOSITORIES_PATH / owner / repository
+    if not processed_path.resolve().is_relative_to(
+        REPOSITORIES_PATH.resolve()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="The index path resolves outside the local index area.",
+        )
+    if not (processed_path / "chunks.pkl").is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="The repository index could not be found.",
+        )
+
+    try:
+        result = answer_endpoint(
+            query=query,
+            processed_path=str(processed_path),
+        )
+    except SystemExit as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not generate an answer for this question.",
+        ) from exc
+
+    sources = "".join(
+        (
+            "<li><code>"
+            f"{escape(source.file_path)}"
+            "</code><span>"
+            f"Characters {source.first_character_index}–"
+            f"{source.last_character_index}"
+            "</span></li>"
+        )
+        for source in result.retrieved_sources
+    )
+    if not sources:
+        sources = (
+            '<li class="empty">No source files were returned.</li>'
+        )
+    answer_page = Template(ANSWER_PAGE_PATH.read_text(encoding="utf-8"))
+    return HTMLResponse(
+        answer_page.substitute(
+            owner=escape(owner),
+            repository=escape(repository),
+            query=escape(result.question),
+            answer=escape(result.answer),
+            sources=sources,
+        )
+    )
+
+
+def _parse_github_repo(repo_link: str) -> tuple[str, str, str]:
+    """Return the canonical URL, owner, and repository for a GitHub URL."""
+    try:
+        parsed = urlparse(repo_link.strip())
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Enter a valid HTTPS GitHub repository URL.",
+        ) from exc
+
+    match = re.fullmatch(
+        r"/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?",
+        parsed.path,
+    )
+    if (
+        parsed.scheme != "https"
+        or hostname != "github.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+        or match is None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Enter an HTTPS GitHub repository URL, such as "
+            "https://github.com/owner/repository.",
+        )
+
+    owner, repository = match.groups()
+    if repository in {".", ".."}:
+        raise HTTPException(
+            status_code=422,
+            detail="The GitHub repository URL is invalid.",
+        )
+    repository = repository.removesuffix(".git")
+    if not repository:
+        raise HTTPException(
+            status_code=422,
+            detail="The GitHub repository URL is invalid.",
+        )
+    canonical_url = f"https://github.com/{owner}/{repository}.git"
+    return canonical_url, owner, repository
+
+
+def _clone_repository(repo_url: str, destination: Path) -> None:
+    """Clone a public GitHub repository without invoking a shell."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env.update(
+        {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_LFS_SKIP_SMUDGE": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    try:
+        result = subprocess.run(
+            ["git", "clone", "--depth=1", "--", repo_url, str(destination)],
+            capture_output=True,
+            check=False,
+            env=env,
+            text=True,
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Cloning the repository timed out.",
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not start Git to clone the repository.",
+        ) from exc
+
+    if result.returncode != 0:
+        message = result.stderr.strip()[-1000:]
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not clone the repository: {message}",
+        )
+    if not (destination / ".git").is_dir():
+        raise HTTPException(
+            status_code=502,
+            detail="Git finished without creating a valid repository.",
+        )
+
+
+@app.get("/usage")
 def home() -> dict:
     """Endpoint action for home operation"""
     message: dict = {
@@ -155,6 +432,8 @@ def answer_endpoint(
 ) -> MinimalAnswer:
     """Endpoint action for answer operation"""
     return boss.answer(
+        model=model,
+        tokenizer=tokenizer,
         query=query,
         k=k,
         generator_model_name=generator_model_name,

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+            name="description"
+            content="An answer grounded in your indexed repository."
+        />
+        <title>Answer from your repository</title>
+        <style>
+            :root {
+                color-scheme: light;
+                --paper: #f7f4ec;
+                --ink: #1d3029;
+                --muted: #6d776e;
+                --line: #d9ded3;
+                --green: #245c45;
+                --orange: #d66b45;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                min-height: 100vh;
+                margin: 0;
+                display: grid;
+                place-items: center;
+                padding: 28px;
+                color: var(--ink);
+                background:
+                    radial-gradient(
+                        ellipse at 50% 20%,
+                        rgba(224, 232, 214, 0.72),
+                        transparent 54%
+                    ),
+                    var(--paper);
+                font-family: Georgia, "Times New Roman", serif;
+            }
+
+            main {
+                width: min(100%, 720px);
+                padding: clamp(28px, 6vw, 54px);
+                border: 1px solid var(--line);
+                border-radius: 5px;
+                background: rgba(255, 254, 250, 0.88);
+                box-shadow: 0 24px 70px rgba(29, 48, 41, 0.08);
+                animation: arrive 500ms ease-out both;
+            }
+
+            .eyebrow {
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                margin: 0 0 23px;
+                color: var(--green);
+                font: 600 11px/1.4 "Courier New", monospace;
+                letter-spacing: 0.11em;
+                text-transform: uppercase;
+            }
+
+            .status-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--orange);
+                box-shadow: 0 0 0 4px rgba(214, 107, 69, 0.12);
+            }
+
+            h1 {
+                margin: 0;
+                font-size: clamp(36px, 7vw, 54px);
+                font-weight: 400;
+                letter-spacing: -0.045em;
+                line-height: 1.04;
+            }
+
+            .repo {
+                overflow-wrap: anywhere;
+                margin: 13px 0 30px;
+                color: var(--muted);
+                font: 13px/1.6 "Courier New", monospace;
+            }
+
+            section + section {
+                margin-top: 26px;
+            }
+
+            h2 {
+                margin: 0 0 10px;
+                font: 600 11px/1.4 "Courier New", monospace;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+            }
+
+            .question {
+                padding: 16px 18px;
+                border-left: 2px solid var(--orange);
+                background: #f7f4ec;
+                font-size: 17px;
+                line-height: 1.55;
+                overflow-wrap: anywhere;
+            }
+
+            .answer {
+                margin: 0;
+                font-size: 17px;
+                line-height: 1.75;
+                overflow-wrap: anywhere;
+                white-space: pre-wrap;
+            }
+
+            .sources {
+                margin: 0;
+                padding: 0;
+                list-style: none;
+                border-top: 1px solid var(--line);
+            }
+
+            .sources li {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 8px 18px;
+                padding: 13px 0;
+                border-bottom: 1px solid var(--line);
+            }
+
+            .sources code {
+                overflow-wrap: anywhere;
+                color: var(--green);
+                font: 13px/1.5 "Courier New", monospace;
+            }
+
+            .sources span {
+                color: var(--muted);
+                font: 11px/1.5 "Courier New", monospace;
+            }
+
+            .sources .empty {
+                padding: 13px 0;
+                color: var(--muted);
+                font-size: 14px;
+                list-style: none;
+            }
+
+            .follow-up {
+                margin-top: 34px;
+                padding-top: 25px;
+                border-top: 1px solid var(--line);
+            }
+
+            label {
+                display: block;
+                margin-bottom: 10px;
+                font-size: 15px;
+            }
+
+            textarea {
+                display: block;
+                width: 100%;
+                min-height: 86px;
+                resize: vertical;
+                padding: 14px 15px;
+                border: 1px solid var(--line);
+                border-radius: 3px;
+                outline: none;
+                color: var(--ink);
+                background: #fffefa;
+                font: 15px/1.5 Georgia, "Times New Roman", serif;
+            }
+
+            textarea:focus-visible {
+                border-color: var(--green);
+                box-shadow: 0 0 0 3px rgba(36, 92, 69, 0.12);
+            }
+
+            button {
+                display: flex;
+                width: 100%;
+                min-height: 50px;
+                align-items: center;
+                justify-content: space-between;
+                margin-top: 11px;
+                padding: 0 17px;
+                border: 0;
+                border-radius: 3px;
+                color: #fffefa;
+                background: var(--green);
+                cursor: pointer;
+                font: 600 13px/1 "Courier New", monospace;
+            }
+
+            button:hover {
+                background: #194733;
+            }
+
+            button:focus-visible {
+                outline: 3px solid rgba(36, 92, 69, 0.3);
+                outline-offset: 3px;
+            }
+
+            .repo-link {
+                display: flex;
+                min-height: 46px;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                margin-top: 12px;
+                border: 1px solid var(--line);
+                border-radius: 3px;
+                color: var(--green);
+                font: 600 12px/1 "Courier New", monospace;
+                text-decoration: none;
+                transition: border-color 160ms ease, background-color 160ms ease;
+            }
+
+            .repo-link:hover {
+                border-color: var(--green);
+                background: rgba(36, 92, 69, 0.04);
+            }
+
+            .repo-link:focus-visible {
+                outline: 3px solid rgba(36, 92, 69, 0.3);
+                outline-offset: 3px;
+            }
+
+            @keyframes arrive {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                *,
+                *::before,
+                *::after {
+                    animation-duration: 0.01ms !important;
+                    animation-iteration-count: 1 !important;
+                    scroll-behavior: auto !important;
+                    transition-duration: 0.01ms !important;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <p class="eyebrow">
+                <span class="status-dot" aria-hidden="true"></span>
+                Answer from your repository
+            </p>
+            <h1>Here’s what I found.</h1>
+            <p class="repo">$repository</p>
+
+            <section aria-labelledby="question-title">
+                <h2 id="question-title">Your question</h2>
+                <div class="question">$query</div>
+            </section>
+
+            <section aria-labelledby="answer-title">
+                <h2 id="answer-title">Answer</h2>
+                <p class="answer">$answer</p>
+            </section>
+
+            <section aria-labelledby="sources-title">
+                <h2 id="sources-title">Relevant files</h2>
+                <ul class="sources">$sources</ul>
+            </section>
+
+            <form class="follow-up" action="/ask" method="post">
+                <input type="hidden" name="owner" value="$owner" />
+                <input
+                    type="hidden"
+                    name="repository"
+                    value="$repository"
+                />
+                <label for="follow-up">Ask another question</label>
+                <textarea
+                    id="follow-up"
+                    name="query"
+                    placeholder="What else would you like to know?"
+                    required
+                ></textarea>
+                <button type="submit">
+                    <span>Ask about this repository</span>
+                    <span aria-hidden="true">→</span>
+                </button>
+            </form>
+            <a class="repo-link" href="/">Try another repository</a>
+        </main>
+    </body>
+</html>

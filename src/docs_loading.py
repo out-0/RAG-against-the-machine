@@ -61,6 +61,8 @@ def load_files(input_path: str) -> list[Document]:
     elif path.is_dir():
         try:
             for p in path.rglob("*"):
+                if p.is_symlink():
+                    continue
                 if p.suffix in extensions:
                     file_content = p.read_text(
                         encoding="utf-8", errors="ignore"

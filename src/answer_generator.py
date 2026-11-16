@@ -10,7 +10,10 @@ from transformers import (
 from src.data_models import Chunk
 
 
-def load_model(model_name: str, cache_dir: str | None) -> tuple[Any, Any]:
+def load_model(
+    model_name: str = "Qwen/Qwen3-0.6B",
+    cache_dir: str | None = None,
+) -> tuple[Any, Any]:
     """
     Load the model and tokenizer, also override huggingface cache dir
 

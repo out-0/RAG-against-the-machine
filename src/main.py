@@ -1,6 +1,7 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import fire
 import tqdm
@@ -413,6 +414,8 @@ class Boss:
 
     def answer(
         self,
+        model: Any,
+        tokenizer: Any,
         query: str,
         k: int = 1,
         generator_model_name: str = "Qwen/Qwen3-0.6B",
@@ -468,9 +471,10 @@ class Boss:
                 )
 
                 # Load model
-                model, tokenizer = load_model(
-                    model_name=generator_model_name, cache_dir=cache_dir
-                )
+                # model, tokenizer = load_model(
+                #     model_name=generator_model_name, cache_dir=cache_dir
+                # )
+
             except Exception as e:
                 print(e)
                 sys.exit()

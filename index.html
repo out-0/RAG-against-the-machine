@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+            name="description"
+            content="Index a GitHub repository and get ready to explore its code."
+        />
+        <title>RAG Against Your Repo</title>
+        <style>
+            :root {
+                color-scheme: light;
+                --paper: #f7f4ec;
+                --ink: #1d3029;
+                --muted: #6d776e;
+                --line: #d9ded3;
+                --green: #245c45;
+                --green-dark: #194733;
+                --orange: #d66b45;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                min-height: 100vh;
+                margin: 0;
+                display: grid;
+                place-items: center;
+                padding: 28px;
+                color: var(--ink);
+                background:
+                    radial-gradient(
+                        ellipse at 50% 42%,
+                        rgba(224, 232, 214, 0.72),
+                        transparent 54%
+                    ),
+                    var(--paper);
+                font-family: Georgia, "Times New Roman", serif;
+            }
+
+            main {
+                width: min(100%, 560px);
+                padding: clamp(30px, 7vw, 58px);
+                border: 1px solid var(--line);
+                border-radius: 5px;
+                background: rgba(255, 254, 250, 0.82);
+                box-shadow: 0 24px 70px rgba(29, 48, 41, 0.08);
+                animation: arrive 500ms ease-out both;
+            }
+
+            .eyebrow {
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                margin: 0 0 29px;
+                color: var(--green);
+                font: 600 11px/1.4 "Courier New", monospace;
+                letter-spacing: 0.11em;
+                text-transform: uppercase;
+            }
+
+            .status-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--orange);
+                box-shadow: 0 0 0 4px rgba(214, 107, 69, 0.12);
+            }
+
+            h1 {
+                max-width: 430px;
+                margin: 0;
+                font-size: clamp(38px, 8vw, 58px);
+                font-weight: 400;
+                letter-spacing: -0.045em;
+                line-height: 1.02;
+            }
+
+            .intro {
+                max-width: 390px;
+                margin: 17px 0 34px;
+                color: var(--muted);
+                font-size: 16px;
+                line-height: 1.6;
+            }
+
+            label {
+                display: block;
+                margin-bottom: 10px;
+                font-size: 15px;
+            }
+
+            input {
+                display: block;
+                width: 100%;
+                min-height: 52px;
+                padding: 13px 15px;
+                border: 1px solid var(--line);
+                border-radius: 3px;
+                outline: none;
+                color: var(--ink);
+                background: #fffefa;
+                font: 14px/1.5 "Courier New", monospace;
+                transition: border-color 160ms ease, box-shadow 160ms ease;
+            }
+
+            input::placeholder {
+                color: #9aa198;
+            }
+
+            input:focus-visible {
+                border-color: var(--green);
+                box-shadow: 0 0 0 3px rgba(36, 92, 69, 0.12);
+            }
+
+            button {
+                display: flex;
+                width: 100%;
+                min-height: 52px;
+                align-items: center;
+                justify-content: space-between;
+                margin-top: 12px;
+                padding: 0 17px;
+                border: 0;
+                border-radius: 3px;
+                color: #fffefa;
+                background: var(--green);
+                cursor: pointer;
+                font: 600 13px/1 "Courier New", monospace;
+                letter-spacing: 0.02em;
+                transition: background-color 160ms ease, transform 160ms ease;
+            }
+
+            button:hover {
+                background: var(--green-dark);
+            }
+
+            button:active {
+                transform: translateY(1px);
+            }
+
+            button:focus-visible {
+                outline: 3px solid rgba(36, 92, 69, 0.3);
+                outline-offset: 3px;
+            }
+
+            .note {
+                margin: 15px 0 0;
+                color: var(--muted);
+                font: 12px/1.5 "Courier New", monospace;
+            }
+
+            @keyframes arrive {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                *,
+                *::before,
+                *::after {
+                    animation-duration: 0.01ms !important;
+                    animation-iteration-count: 1 !important;
+                    scroll-behavior: auto !important;
+                    transition-duration: 0.01ms !important;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <p class="eyebrow">
+                <span class="status-dot" aria-hidden="true"></span>
+                RAG against the machine
+            </p>
+            <h1>Get to know your code.</h1>
+            <p class="intro">
+                Start with a GitHub repository. We’ll bring its docs and Python
+                files into focus.
+            </p>
+            <form action="/process-repo" method="POST">
+                <label for="repo-link">GitHub repository URL</label>
+                <input
+                    id="repo-link"
+                    type="url"
+                    name="repo_link"
+                    placeholder="https://github.com/owner/repository"
+                    autocomplete="url"
+                    required
+                />
+                <button type="submit">
+                    <span>Clone and index repository</span>
+                    <span aria-hidden="true">→</span>
+                </button>
+            </form>
+            <p class="note">
+                Repository files are indexed locally before you start asking.
+            </p>
+        </main>
+    </body>
+</html>
