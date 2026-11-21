@@ -26,3 +26,5 @@ clean:
 	@rm -rf src/__pycache__
 	@rm -rf .nvim
 
+start-server:
+	uv run fastapi dev src/api.py

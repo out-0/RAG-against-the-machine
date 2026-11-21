@@ -9,6 +9,8 @@ src/__pycache__
 .venv
 .vscode
 data/raw/
+data/repos/
+data/repo_cache.json
 vllm*/
 moulinette*
 data/indexes/*

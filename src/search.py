@@ -102,14 +102,14 @@ def search_one(
 
     # Decide which mode to run
     if use_hybrid:
-        # Check if query is cached so we can return cached result
+        # Reuse cached results only when they cover the requested result count.
         result: list[Chunk] | None = check_if_query_cached(
             query=query,
             processed_path=processed_path,
         )
-        if result is not None:
+        if result is not None and len(result) >= k:
             print_green("cached query used")
-            return result
+            return result[:k]
         bm25_results = GetKeywordMatching_result()
         embed_results = GetSemantic_result()
 
@@ -205,7 +205,7 @@ def search_batch(
     use_embedding: bool = False,
 ) -> list[list[Chunk]]:
     """
-    Retreiving for batch of questions using the above search one,
+    Retrieving for batch of questions using the above search one,
     the retriever and chuns should be reloaded before calling this
     functions,
 

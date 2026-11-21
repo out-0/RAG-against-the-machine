@@ -2,6 +2,7 @@ import os
 import re
 import subprocess
 import tempfile
+import uuid
 from html import escape
 from pathlib import Path
 from string import Template
@@ -11,15 +12,23 @@ from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse
 
 from src.answer_generator import load_model
+from src.custom_print import print_green, print_yellow
 from src.data_models import (
     MinimalAnswer,
     MinimalSearchResults,
     StudentSearchResultsAndAnswer,
 )
 from src.main import Boss
+from src.repo_cache import (
+    hash_indexable_files,
+    load_repo_cache,
+    save_repo_cache_entry,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-REPOSITORIES_PATH = PROJECT_ROOT / "data" / "indexes"
+REPOSITORIES_PATH = PROJECT_ROOT / "data" / "repos"
+INDEXES_PATH = PROJECT_ROOT / "data" / "indexes"
+REPO_CACHE_PATH = PROJECT_ROOT / "data" / "repo_cache.json"
 PROMPT_PAGE_PATH = PROJECT_ROOT / "prompt.html"
 ANSWER_PAGE_PATH = PROJECT_ROOT / "answer.html"
 INDEX_PAGE = PROJECT_ROOT / "index.html"
@@ -32,17 +41,128 @@ model, tokenizer = load_model()
 # OPTION FOR USING EMBEDDING MODEL FOR SEMANTIC INDEXING
 
 
+def _cache_key(owner: str, repository: str) -> str:
+    return f"https://github.com/{owner.casefold()}/{repository.casefold()}"
+
+
+def _cached_index(
+    cache: dict[str, object],
+    key: str,
+) -> tuple[dict[str, str], Path, str] | None:
+    entry = cache.get(key)
+    if not isinstance(entry, dict):
+        return None
+
+    files = entry.get("files")
+    index_reference = entry.get("index")
+    if not isinstance(files, dict) or not isinstance(index_reference, str):
+        return None
+    if not all(
+        isinstance(file_path, str) and isinstance(file_hash, str)
+        for file_path, file_hash in files.items()
+    ):
+        return None
+
+    relative_index_path = Path(index_reference)
+    if (
+        relative_index_path.is_absolute()
+        or ".." in relative_index_path.parts
+        or not relative_index_path.parts
+    ):
+        return None
+
+    index_path = (INDEXES_PATH / relative_index_path).resolve()
+    if (
+        not index_path.is_relative_to(INDEXES_PATH.resolve())
+        or not (index_path / "chunks.pkl").is_file()
+    ):
+        return None
+    return files, index_path, index_reference
+
+
+def _activate_repository(
+    downloaded_path: Path,
+    repository_path: Path,
+    temporary_root: Path,
+) -> Path | None:
+    repository_path.parent.mkdir(parents=True, exist_ok=True)
+    backup_path = temporary_root / "previous-repository"
+    had_previous = repository_path.exists() or repository_path.is_symlink()
+    if had_previous:
+        repository_path.rename(backup_path)
+
+    try:
+        downloaded_path.rename(repository_path)
+    except OSError as exc:
+        if had_previous and backup_path.exists():
+            backup_path.rename(repository_path)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not install the downloaded repository locally.",
+        ) from exc
+
+    return backup_path if had_previous else None
+
+
+def _restore_repository(
+    repository_path: Path,
+    backup_path: Path | None,
+    temporary_root: Path,
+) -> None:
+    if backup_path is None or not backup_path.exists():
+        return
+    failed_path = temporary_root / "failed-repository"
+    if repository_path.exists() or repository_path.is_symlink():
+        repository_path.rename(failed_path)
+    backup_path.rename(repository_path)
+
+
+def _build_repository_index(
+    repository_path: Path,
+    index_path: Path,
+) -> None:
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    if not index_path.parent.resolve().is_relative_to(INDEXES_PATH.resolve()):
+        raise HTTPException(
+            status_code=400,
+            detail="The index path resolves outside the local index area.",
+        )
+
+    with tempfile.TemporaryDirectory(
+        prefix=".index-",
+        dir=index_path.parent,
+    ) as temporary_directory:
+        staged_index = Path(temporary_directory) / "index"
+        try:
+            index_endpoint(
+                raw_path=str(repository_path),
+                processed_path=str(staged_index),
+            )
+        except SystemExit as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="The repository was downloaded, but indexing failed.",
+            ) from exc
+        if not (staged_index / "chunks.pkl").is_file():
+            raise HTTPException(
+                status_code=500,
+                detail="Indexing did not produce the expected chunk data.",
+            )
+        staged_index.rename(index_path)
+
+
 @app.get("/", response_class=HTMLResponse)
 def home_ui():
     return (INDEX_PAGE).read_text(encoding="utf-8")
 
 
 @app.post("/process-repo")
-def process_repo(repo_link: str = Form(...)):
+def process_repo(repo_link: str = Form(...)) -> HTMLResponse:
     repo_url, owner, repository = _parse_github_repo(repo_link)
-    repo_path = REPOSITORIES_PATH / owner / repository
-    resolved_repo_root = REPOSITORIES_PATH.resolve()
-    if not repo_path.resolve().is_relative_to(resolved_repo_root):
+    repo_path = REPOSITORIES_PATH / owner.casefold() / repository.casefold()
+    REPOSITORIES_PATH.mkdir(parents=True, exist_ok=True)
+    INDEXES_PATH.mkdir(parents=True, exist_ok=True)
+    if not repo_path.resolve().is_relative_to(REPOSITORIES_PATH.resolve()):
         raise HTTPException(
             status_code=400,
             detail=(
@@ -50,70 +170,84 @@ def process_repo(repo_link: str = Form(...)):
             ),
         )
 
-    if repo_path.exists():
-        if not (repo_path / ".git").is_dir():
-            raise HTTPException(
-                status_code=409,
-                detail="A non-repository already exists at the clone path.",
-            )
-        try:
-            remote = subprocess.run(
-                ["git", "-C", str(repo_path), "remote", "get-url", "origin"],
-                capture_output=True,
-                check=False,
-                text=True,
-                timeout=10,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise HTTPException(
-                status_code=500,
-                detail="Could not verify the existing local repository.",
-            ) from exc
-        if remote.returncode != 0 or remote.stdout.strip().removesuffix(
-            ".git"
-        ) != repo_url.removesuffix(".git"):
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "The existing local repository does not match this URL."
-                ),
-            )
-    else:
-        with tempfile.TemporaryDirectory(
-            prefix=".clone-", dir=PROJECT_ROOT
-        ) as temporary_directory:
-            temporary_repo_path = Path(temporary_directory) / "repository"
-            _clone_repository(repo_url, temporary_repo_path)
-            repo_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                temporary_repo_path.rename(repo_path)
-            except FileExistsError:
-                if not (repo_path / ".git").is_dir():
-                    raise HTTPException(
-                        status_code=409,
-                        detail="A repository appeared at the clone path.",
-                    )
-
-    processed_path = PROJECT_ROOT / "data" / "indexes" / owner / repository
     try:
-        index_endpoint(
-            raw_path=str(repo_path),
-            processed_path=str(processed_path),
-        )
-    except SystemExit as exc:
+        cache = load_repo_cache(REPO_CACHE_PATH)
+    except (OSError, ValueError) as exc:
         raise HTTPException(
             status_code=500,
-            detail="The repository was cloned, but indexing failed.",
+            detail="Could not read the repository index cache.",
         ) from exc
 
-    if not (processed_path / "chunks.pkl").is_file():
-        raise HTTPException(
-            status_code=500,
-            detail="Indexing did not produce the expected chunk data.",
-        )
+    cache_key = _cache_key(owner, repository)
+    cache_entry = _cached_index(cache, cache_key)
+    with tempfile.TemporaryDirectory(
+        prefix=".download-",
+        dir=REPOSITORIES_PATH,
+    ) as temporary_directory:
+        temporary_root = Path(temporary_directory)
+        downloaded_path = temporary_root / "repository"
+        _clone_repository(repo_url, downloaded_path)
+        try:
+            file_hashes = hash_indexable_files(downloaded_path)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not hash the downloaded repository files.",
+            ) from exc
+        if not file_hashes:
+            raise HTTPException(
+                status_code=422,
+                detail="The repository contains no Python or Markdown files.",
+            )
 
-    prompt_page = PROMPT_PAGE_PATH.read_text(encoding="utf-8")
-    prompt_page = Template(prompt_page).substitute(
+        if (
+            cache_entry is not None
+            and len(cache_entry[0]) == len(file_hashes)
+            and cache_entry[0] == file_hashes
+        ):
+            _activate_repository(
+                downloaded_path,
+                repo_path,
+                temporary_root,
+            )
+        else:
+            backup_path = _activate_repository(
+                downloaded_path,
+                repo_path,
+                temporary_root,
+            )
+            relative_index_path = (
+                Path(owner.casefold())
+                / repository.casefold()
+                / uuid.uuid4().hex
+            )
+            index_path = INDEXES_PATH / relative_index_path
+            index_ready = False
+            try:
+                _build_repository_index(repo_path, index_path)
+                save_repo_cache_entry(
+                    cache_path=REPO_CACHE_PATH,
+                    url=cache_key,
+                    file_hashes=file_hashes,
+                    index_path=relative_index_path.as_posix(),
+                )
+                index_ready = True
+            except (OSError, ValueError) as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Could not save the repository index cache.",
+                ) from exc
+            finally:
+                if not index_ready:
+                    _restore_repository(
+                        repo_path,
+                        backup_path,
+                        temporary_root,
+                    )
+
+    prompt_page = Template(
+        PROMPT_PAGE_PATH.read_text(encoding="utf-8")
+    ).substitute(
         owner=escape(owner),
         repository=escape(repository),
     )
@@ -127,34 +261,35 @@ def ask_repository(
     repository: str = Form(...),
 ) -> HTMLResponse:
     query = query.strip()
+    print_yellow(query)  # Log the query to the server
     if not query:
         raise HTTPException(status_code=422, detail="Enter a question.")
     valid_owner = re.fullmatch(r"[A-Za-z0-9_-]+", owner) is not None
-    valid_repository = re.fullmatch(
-        r"[A-Za-z0-9_.-]+", repository
-    ) is not None
-    if (
-        not valid_owner
-        or not valid_repository
-        or repository in {".", ".."}
-    ):
+    valid_repository = re.fullmatch(r"[A-Za-z0-9_.-]+", repository) is not None
+    if not valid_owner or not valid_repository or repository in {".", ".."}:
         raise HTTPException(
             status_code=422,
             detail="The repository identifier is invalid.",
         )
 
-    processed_path = REPOSITORIES_PATH / owner / repository
-    if not processed_path.resolve().is_relative_to(
-        REPOSITORIES_PATH.resolve()
-    ):
+    try:
+        cache = load_repo_cache(REPO_CACHE_PATH)
+    except (OSError, ValueError) as exc:
         raise HTTPException(
-            status_code=400,
-            detail="The index path resolves outside the local index area.",
-        )
-    if not (processed_path / "chunks.pkl").is_file():
+            status_code=500,
+            detail="Could not read the repository index cache.",
+        ) from exc
+    cache_entry = _cached_index(cache, _cache_key(owner, repository))
+    if cache_entry is None:
         raise HTTPException(
             status_code=404,
             detail="The repository index could not be found.",
+        )
+    processed_path = cache_entry[1]
+    if not processed_path.resolve().is_relative_to(INDEXES_PATH.resolve()):
+        raise HTTPException(
+            status_code=400,
+            detail="The index path resolves outside the local index area.",
         )
 
     try:
@@ -180,9 +315,7 @@ def ask_repository(
         for source in result.retrieved_sources
     )
     if not sources:
-        sources = (
-            '<li class="empty">No source files were returned.</li>'
-        )
+        sources = '<li class="empty">No source files were returned.</li>'
     answer_page = Template(ANSWER_PAGE_PATH.read_text(encoding="utf-8"))
     return HTMLResponse(
         answer_page.substitute(
@@ -423,7 +556,7 @@ def search_dataset_endpoint(
 @app.post("/answer")
 def answer_endpoint(
     query: str,
-    k: int = 1,
+    k: int = 10,
     generator_model_name: str = "Qwen/Qwen3-0.6B",
     cache_dir: str | None = None,
     processed_path: str = "data/processed/",

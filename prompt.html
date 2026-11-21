@@ -41,8 +41,13 @@
             }
 
             main {
-                width: min(100%, 560px);
-                padding: clamp(30px, 7vw, 58px);
+                width: min(100%, 1650px);
+                min-height: min(1020px, calc(100vh - 56px));
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: clamp(32px, 7vw, 62px);
                 border: 1px solid var(--line);
                 border-radius: 5px;
                 background: rgba(255, 254, 250, 0.82);
@@ -53,10 +58,13 @@
             .eyebrow {
                 display: flex;
                 align-items: center;
+                justify-content: center;
                 gap: 9px;
                 margin: 0 0 29px;
                 color: var(--green);
-                font: 600 11px/1.4 "Courier New", monospace;
+                font:
+                    600 clamp(12px, 0.8vw, 14px) / 1.4 "Courier New",
+                    monospace;
                 letter-spacing: 0.11em;
                 text-transform: uppercase;
             }
@@ -70,31 +78,39 @@
             }
 
             h1 {
-                max-width: 430px;
                 margin: 0;
-                font-size: clamp(38px, 8vw, 58px);
+                font-size: clamp(42px, 5.5vw, 88px);
                 font-weight: 400;
                 letter-spacing: -0.045em;
                 line-height: 1.02;
+                text-align: center;
             }
 
             .repo {
                 overflow-wrap: anywhere;
                 margin: 15px 0 34px;
                 color: var(--muted);
-                font: 13px/1.6 "Courier New", monospace;
+                font:
+                    clamp(14px, 1vw, 17px) / 1.6 "Courier New",
+                    monospace;
+                text-align: center;
+            }
+
+            form,
+            .repo-link {
+                width: min(100%, 900px);
             }
 
             label {
                 display: block;
                 margin-bottom: 10px;
-                font-size: 15px;
+                font-size: clamp(17px, 1.3vw, 20px);
             }
 
             textarea {
                 display: block;
                 width: 100%;
-                min-height: 124px;
+                min-height: clamp(124px, 12vw, 190px);
                 resize: vertical;
                 padding: 15px 16px;
                 border: 1px solid var(--line);
@@ -102,8 +118,13 @@
                 outline: none;
                 color: var(--ink);
                 background: #fffefa;
-                font: 15px/1.5 Georgia, "Times New Roman", serif;
-                transition: border-color 160ms ease, box-shadow 160ms ease;
+                font:
+                    clamp(17px, 1.2vw, 20px) / 1.5 Georgia,
+                    "Times New Roman",
+                    serif;
+                transition:
+                    border-color 160ms ease,
+                    box-shadow 160ms ease;
             }
 
             textarea::placeholder {
@@ -116,27 +137,35 @@
             }
 
             .note {
+                width: min(100%, 900px);
                 margin: 14px 0 0;
                 color: var(--muted);
-                font: 12px/1.5 "Courier New", monospace;
+                font:
+                    clamp(14px, 0.9vw, 16px) / 1.5 "Courier New",
+                    monospace;
+                text-align: center;
             }
 
             button {
                 display: flex;
                 width: 100%;
-                min-height: 52px;
+                min-height: clamp(52px, 5.5vw, 72px);
                 align-items: center;
                 justify-content: space-between;
                 margin-top: 12px;
-                padding: 0 17px;
+                padding: 0 22px;
                 border: 0;
                 border-radius: 3px;
                 color: #fffefa;
                 background: var(--green);
                 cursor: pointer;
-                font: 600 13px/1 "Courier New", monospace;
+                font:
+                    600 clamp(15px, 1.1vw, 18px) / 1 "Courier New",
+                    monospace;
                 letter-spacing: 0.02em;
-                transition: background-color 160ms ease, transform 160ms ease;
+                transition:
+                    background-color 160ms ease,
+                    transform 160ms ease;
             }
 
             button:hover {
@@ -152,6 +181,33 @@
                 outline-offset: 3px;
             }
 
+            .loading-state {
+                display: grid;
+                width: 100%;
+                min-height: clamp(52px, 5.5vw, 72px);
+                place-items: center;
+                margin-top: 12px;
+            }
+
+            .loading-state[hidden] {
+                display: none;
+            }
+
+            .loading-spinner {
+                width: 26px;
+                height: 26px;
+                border: 3px solid var(--line);
+                border-top-color: var(--green);
+                border-radius: 50%;
+                animation: spin 750ms linear infinite;
+            }
+
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
             .repo-link {
                 display: flex;
                 min-height: 46px;
@@ -162,9 +218,13 @@
                 border: 1px solid var(--line);
                 border-radius: 3px;
                 color: var(--green);
-                font: 600 12px/1 "Courier New", monospace;
+                font:
+                    600 clamp(14px, 0.9vw, 16px) / 1 "Courier New",
+                    monospace;
                 text-decoration: none;
-                transition: border-color 160ms ease, background-color 160ms ease;
+                transition:
+                    border-color 160ms ease,
+                    background-color 160ms ease;
             }
 
             .repo-link:hover {
@@ -209,13 +269,9 @@
             </p>
             <h1>Ask what’s inside.</h1>
             <p class="repo">$repository</p>
-            <form action="/ask" method="post">
+            <form class="ask-form" action="/ask" method="post">
                 <input type="hidden" name="owner" value="$owner" />
-                <input
-                    type="hidden"
-                    name="repository"
-                    value="$repository"
-                />
+                <input type="hidden" name="repository" value="$repository" />
                 <label for="prompt">What would you like to know?</label>
                 <textarea
                     id="prompt"
@@ -228,11 +284,27 @@
                     <span>Find an answer</span>
                     <span aria-hidden="true">→</span>
                 </button>
+                <div
+                    class="loading-state"
+                    role="status"
+                    aria-label="Generating answer"
+                    hidden
+                >
+                    <span class="loading-spinner" aria-hidden="true"></span>
+                </div>
             </form>
             <p class="note">
                 Answers are grounded in the indexed Python and Markdown files.
             </p>
             <a class="repo-link" href="/">Try another repository</a>
         </main>
+        <script>
+            document.querySelectorAll(".ask-form").forEach((form) => {
+                form.addEventListener("submit", () => {
+                    form.querySelector('button[type="submit"]').hidden = true;
+                    form.querySelector(".loading-state").hidden = false;
+                });
+            });
+        </script>
     </body>
 </html>
